@@ -1,0 +1,19 @@
+{
+    "name": "dvra/membership-manager-php",
+    "description": "PHP port of DVRA Membership Manager (shared-hosting friendly, work in progress)",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.2",
+        "slim/slim": "^4.13",
+        "slim/psr7": "^1.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "DvraMembership\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
