@@ -109,6 +109,48 @@ final class MemberInputNormalizer
         return $parsed;
     }
 
+    /**
+     * Payment create/edit form (PaymentCreate).
+     *
+     * @param array<string, mixed> $body
+     * @return array{ok: bool, error: string, data?: array{payment_date: string, paid_through: string, membership_type_id: ?int, notes: ?string, form_number: ?string}}
+     */
+    public static function paymentFromForm(array $body): array
+    {
+        $pdRaw = isset($body['payment_date']) ? trim((string) $body['payment_date']) : '';
+        $ptRaw = isset($body['paid_through']) ? trim((string) $body['paid_through']) : '';
+        if ($pdRaw === '' || $ptRaw === '') {
+            return ['ok' => false, 'error' => 'Payment date and paid-through date are required.'];
+        }
+        try {
+            $paymentDate = (new \DateTimeImmutable($pdRaw))->format('Y-m-d');
+            $paidThrough = (new \DateTimeImmutable($ptRaw))->format('Y-m-d');
+        } catch (\Throwable) {
+            return ['ok' => false, 'error' => 'Invalid payment or paid-through date.'];
+        }
+
+        $mtRaw = isset($body['membership_type']) ? trim((string) $body['membership_type']) : '';
+        $membershipTypeId = $mtRaw !== '' && ctype_digit($mtRaw) ? (int) $mtRaw : null;
+
+        $notesRaw = isset($body['notes']) ? trim((string) $body['notes']) : '';
+        $notes = $notesRaw !== '' ? $notesRaw : null;
+
+        $fnRaw = isset($body['form_number']) ? trim((string) $body['form_number']) : '';
+        $formNumber = $fnRaw !== '' ? $fnRaw : null;
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'data' => [
+                'payment_date' => $paymentDate,
+                'paid_through' => $paidThrough,
+                'membership_type_id' => $membershipTypeId,
+                'notes' => $notes,
+                'form_number' => $formNumber,
+            ],
+        ];
+    }
+
     public static function referenceLabel(?string $name, ?string $label): string
     {
         $lab = trim((string) ($label ?? ''));

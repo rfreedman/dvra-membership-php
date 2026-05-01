@@ -5,6 +5,7 @@ declare(strict_types=1);
 use DvraMembership\Repository\DuplicateMemberKeyNumber;
 use DvraMembership\Repository\MemberListRepository;
 use DvraMembership\Repository\MemberRepository;
+use DvraMembership\Repository\PaymentRepository;
 use DvraMembership\Support\AdminSeed;
 use DvraMembership\Support\MemberInputNormalizer;
 use DvraMembership\Support\PdoFactory;
@@ -192,6 +193,7 @@ $app->get('/', function (Request $request, Response $response) use ($pdo, $wrapH
 })->add($authMiddleware);
 
 $membersRepo = new MemberRepository($pdo);
+$paymentsRepo = new PaymentRepository($pdo);
 
 $mRef = static function () use ($membersRepo): array {
     return [
@@ -368,6 +370,87 @@ $app->post('/members/{member_id}/delete', function (Request $request, Response $
     return $response->withHeader('Location', $mLocView('/'))->withStatus(303);
 })->add($authMiddleware);
 
+$app->post('/members/{member_id}/payments/new', function (Request $request, Response $response, array $args) use (
+    $membersRepo,
+    $paymentsRepo,
+    $mLocView
+): Response {
+    $memberId = isset($args['member_id']) ? (int) $args['member_id'] : 0;
+    if ($memberId <= 0 || $membersRepo->findMemberById($memberId) === null) {
+        return $response->withHeader('Location', $mLocView('/'))->withStatus(303);
+    }
+    /** @var array<string, mixed> $bodyRaw */
+    $bodyRaw = $request->getParsedBody();
+    $bodyRaw = \is_array($bodyRaw) ? $bodyRaw : [];
+    $parsed = MemberInputNormalizer::paymentFromForm($bodyRaw);
+    if (!$parsed['ok']) {
+        $_SESSION['dvra_flash_payment_error'] = $parsed['error'];
+
+        return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+    }
+    try {
+        $paymentsRepo->insertPayment($memberId, $parsed['data']);
+    } catch (\Throwable) {
+        $_SESSION['dvra_flash_payment_error'] = 'Could not save payment.';
+
+        return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+    }
+
+    return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+})->add($authMiddleware);
+
+$app->post('/payments/{payment_id}/edit', function (Request $request, Response $response, array $args) use (
+    $paymentsRepo,
+    $mLocView
+): Response {
+    $paymentId = isset($args['payment_id']) ? (int) $args['payment_id'] : 0;
+    /** @var array<string, mixed> $bodyRaw */
+    $bodyRaw = $request->getParsedBody();
+    $bodyRaw = \is_array($bodyRaw) ? $bodyRaw : [];
+    $parsed = MemberInputNormalizer::paymentFromForm($bodyRaw);
+    $meta = $paymentId > 0 ? $paymentsRepo->findPaymentMeta($paymentId) : null;
+    if ($meta === null) {
+        return $response->withHeader('Location', $mLocView('/'))->withStatus(303);
+    }
+    $memberId = $meta['member_id'];
+    if (!$parsed['ok']) {
+        $_SESSION['dvra_flash_payment_error'] = $parsed['error'];
+
+        return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+    }
+    try {
+        $mid = $paymentsRepo->updatePayment($paymentId, $parsed['data']);
+        if ($mid === null) {
+            return $response->withHeader('Location', $mLocView('/'))->withStatus(303);
+        }
+    } catch (\Throwable) {
+        $_SESSION['dvra_flash_payment_error'] = 'Could not save payment.';
+
+        return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+    }
+
+    return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+})->add($authMiddleware);
+
+$app->post('/payments/{payment_id}/delete', function (Request $request, Response $response, array $args) use (
+    $paymentsRepo,
+    $mLocView
+): Response {
+    $paymentId = isset($args['payment_id']) ? (int) $args['payment_id'] : 0;
+    $meta = $paymentId > 0 ? $paymentsRepo->findPaymentMeta($paymentId) : null;
+    if ($meta === null) {
+        return $response->withHeader('Location', $mLocView('/'))->withStatus(303);
+    }
+    $memberId = $meta['member_id'];
+    try {
+        $paymentsRepo->deletePayment($paymentId);
+    } catch (\Throwable) {
+        $_SESSION['dvra_flash_payment_error'] = 'Could not delete payment.';
+    }
+
+    return $response->withHeader('Location', $mLocView('/members/' . $memberId . '/payments'))->withStatus(303);
+})->add($authMiddleware);
+
 $app->get('/members/{member_id}/payments', function (Request $request, Response $response, array $args) use (
     $membersRepo,
     $wrapHtml,
@@ -381,13 +464,25 @@ $app->get('/members/{member_id}/payments', function (Request $request, Response 
 
         return $htmlResponse((new SlimResponse(404)), $wrapHtml($nf, 'Not found', $membersExtras));
     }
+    $flashError = null;
+    if (!empty($_SESSION['dvra_flash_payment_error'])) {
+        $flashError = (string) $_SESSION['dvra_flash_payment_error'];
+        unset($_SESSION['dvra_flash_payment_error']);
+    }
     $payments = $membersRepo->listPaymentsForMember($id);
+    // Strip display-only field for edit rows (template uses membership_type_id).
+    foreach ($payments as $k => $p) {
+        unset($payments[$k]['membership_type_display']);
+    }
     $ctx = [
         'member' => $member,
         'payments' => $payments,
+        'membership_types' => $membersRepo->listMembershipTypes(),
+        'flash_error' => $flashError,
         'base' => $urlBase,
     ];
-    $body = $wrapHtml(View::render('member_payments_readonly', $ctx), 'Payments', $membersExtras);
+    $scripts = View::render('member_payments_scripts');
+    $body = $wrapHtml(View::render('member_payments', $ctx), 'Payments', array_merge($membersExtras, ['extraScriptsHtml' => $scripts]));
 
     return $htmlResponse($response, $body);
 })->add($authMiddleware);
