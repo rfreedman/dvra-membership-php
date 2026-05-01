@@ -2,7 +2,7 @@
 
 Standalone **PHP** scaffold (not part of any Python repo). Intended for deployment on **shared hosting** alongside other PHP—no long-lived application server required.
 
-Uses **Slim 4**. Feature parity with the DVRA FastAPI/Python application is **not** implemented yet: no Tabulator member grid, spreadsheet import, JSON REST surface, CSV/XLSX/PDF exports, payment CRUD, or reference admin screens. Implemented today: SQLite schema bootstrap (aligned with the Python data model), session login/logout, **`GET /health`**, and a read-only members preview table.
+Uses **Slim 4**. **`/`**: Tabulator grid with filters/sort (Python-aligned). **`/members/new`**, **`/members/{id}/view`** (single-form edit), **`POST …/delete`**, validations (duplicate call sign, duplicate name-without-call, unique key number), unsaved-change guard + delete confirm mirroring Python. **`/members/{id}/payments`**: read-only payment listing (PHP payment add/edit/delete not ported yet). Still not ported: spreadsheet import, JSON REST API, CSV/XLSX/PDF routes, full payments UI, reports, admin/reference screens (export links on `/` still 404).
 
 Shared UI assets (`public/static/style.css`, `w2zq-site-icon-gold.png`) are **copies**; when you change branding in one stack, update the other manually if you want them to match.
 

@@ -11,6 +11,7 @@ $t = $title ?? 'DVRA Membership Manager';
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= $h($t) ?></title>
   <link rel="stylesheet" href="<?= $h(($base ?? '') . '/static/style.css') ?>">
+  <?= $extraHeadHtml ?? '' ?>
 </head>
 <body>
 <?php if (!empty($simpleLayout)): ?>
@@ -26,7 +27,9 @@ $t = $title ?? 'DVRA Membership Manager';
     </div>
     <nav class="site-nav">
       <?php if (!empty($authenticated)): ?>
-      <span class="muted">PHP preview</span>
+      <a href="<?= $h(($base ?? '') . '/') ?>" class="<?= ($activeNav ?? '') === 'members' ? 'active' : '' ?>">Members</a>
+      <a href="<?= $h(($base ?? '') . '/reports') ?>" class="<?= ($activeNav ?? '') === 'reports' ? 'active' : '' ?>">Reports</a>
+      <a href="<?= $h(($base ?? '') . '/admin') ?>" class="<?= ($activeNav ?? '') === 'admin' ? 'active' : '' ?>">Admin</a>
       <form class="logout-form" method="post" action="<?= $h(($base ?? '') . '/logout') ?>">
         <button type="submit">Logout</button>
       </form>
@@ -40,7 +43,7 @@ $t = $title ?? 'DVRA Membership Manager';
 <script>
 (function () {
   function fitScrollablePanels() {
-    var panels = document.querySelectorAll(".grid-page-body > .data-table-scroll, .standard-page-scroll");
+    var panels = document.querySelectorAll(".grid-page-body > .members-tabulator-wrap, .grid-page-body > .data-table-scroll, .standard-page-scroll");
     if (!panels.length) return;
     var vh = window.innerHeight || document.documentElement.clientHeight || 0;
     var siteMain = document.querySelector(".site-main");
@@ -49,8 +52,22 @@ $t = $title ?? 'DVRA Membership Manager';
     for (var i = 0; i < panels.length; i++) {
       var panel = panels[i];
       var rect = panel.getBoundingClientRect();
-      var target = Math.max(180, Math.floor(vh - rect.top - pad - 12));
+      var gap = 12;
+      if (panel.classList.contains("data-table-scroll")) {
+        gap = 44;
+      } else if (panel.classList.contains("standard-page-scroll")) {
+        gap = 12;
+      } else if (panel.classList.contains("members-tabulator-wrap")) {
+        gap = 8;
+      }
+      var target = Math.max(180, Math.floor(vh - rect.top - pad - gap));
       panel.style.height = target + "px";
+      if (panel.classList.contains("members-tabulator-wrap")) {
+        var tabulatorRoot = panel.querySelector(".tabulator");
+        if (tabulatorRoot && tabulatorRoot.tabulator && typeof tabulatorRoot.tabulator.redraw === "function") {
+          tabulatorRoot.tabulator.redraw(true);
+        }
+      }
     }
   }
   window.addEventListener("resize", fitScrollablePanels);
@@ -60,6 +77,7 @@ $t = $title ?? 'DVRA Membership Manager';
   });
 })();
 </script>
+<?= $extraScriptsHtml ?? '' ?>
 <?php endif; ?>
 </body>
 </html>

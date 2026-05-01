@@ -15,6 +15,6 @@ $base = $base ?? '';
   <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
   <button type="submit">Sign in</button>
 </form>
-<p class="muted">PHP port — scaffold only; use the Python app in <code>python/</code> for full functionality.</p>
+<p class="muted">PHP port — members list mirrors the Python app’s grid UI; deeper features are still migrating.</p>
 </div>
 </div>
