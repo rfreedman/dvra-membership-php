@@ -2,7 +2,10 @@
 /** @var string $membersJson — json_encode output; embed only from server */
 /** @var string $sort_by */
 /** @var string $sort_dir */
+/** @var string $base */
+/** @var string $listParamsForExportJson */
 $js = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$listParamsBase = $listParamsForExportJson ?? '{}';
 ?>
 <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2/dist/js/tabulator.min.js"></script>
 <script>
@@ -10,6 +13,8 @@ $js = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUB
   const MEMBERS_DATA = <?= $membersJson ?>;
   const SERVER_SORT_BY = "<?= $js((string) $sort_by) ?>";
   const SERVER_SORT_DIR = "<?= $js((string) $sort_dir) ?>";
+  const APP_BASE = "<?= $js((string) ($base ?? "")) ?>";
+  const LIST_PARAMS_BASE = <?= $listParamsBase ?>;
 
   const dash = "—";
   const form = document.getElementById("members-filter-form");
@@ -18,6 +23,61 @@ $js = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUB
 
   function syncCurrentOnlyHiddenFromCheckbox() {
     currentOnlyField.value = currentOnlyCb.checked ? "yes" : "no";
+  }
+
+  function mergeListParamsWithLiveGrid() {
+    const p = {};
+    Object.assign(p, LIST_PARAMS_BASE);
+    const sorters =
+      typeof table.getSorters === "function"
+        ? table.getSorters()
+        : [];
+    if (sorters && sorters.length > 0) {
+      p.sort_by = sorters[0].field;
+      p.sort_dir = sorters[0].dir;
+    } else {
+      p.sort_by = SERVER_SORT_BY;
+      p.sort_dir = SERVER_SORT_DIR;
+    }
+    syncCurrentOnlyHiddenFromCheckbox();
+    p.current_only = currentOnlyField.value || "yes";
+    return p;
+  }
+
+  function buildMembersExportSearchParams(p) {
+    const q = new URLSearchParams();
+    q.set("sort_by", String(p.sort_by || ""));
+    q.set("sort_dir", String(p.sort_dir || ""));
+    q.set("current_only", p.current_only === "no" ? "no" : "yes");
+    q.set("search", p.search !== undefined ? String(p.search) : "");
+    q.set("arrl", p.arrl !== undefined ? String(p.arrl) : "");
+    q.set("has_key", p.has_key !== undefined ? String(p.has_key) : "");
+    if (
+      Object.prototype.hasOwnProperty.call(p, "membership_type_id") &&
+      p.membership_type_id !== undefined &&
+      p.membership_type_id !== "" &&
+      p.membership_type_id !== null
+    ) {
+      q.set(
+        "membership_type_id",
+        String(Number.isFinite(Number(p.membership_type_id)) ? Number(p.membership_type_id) : p.membership_type_id)
+      );
+    }
+    return q;
+  }
+
+  function syncExportLinks() {
+    const p = mergeListParamsWithLiveGrid();
+    const qs = buildMembersExportSearchParams(p).toString();
+    const suffix = qs !== "" ? "?" + qs : "";
+    const paths = ["xlsx", "csv", "pdf"];
+    paths.forEach((ext) => {
+      const link = document.getElementById("members-export-link-" + ext);
+      if (!link) {
+        return;
+      }
+      link.href = APP_BASE + "/members/export." + ext + suffix;
+    });
   }
 
   const table = new Tabulator("#members-grid", {
@@ -112,6 +172,7 @@ $js = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUB
       form.querySelector('[name="sort_by"]').value = sorters[0].field;
       form.querySelector('[name="sort_dir"]').value = sorters[0].dir;
     }
+    syncExportLinks();
   });
 
   currentOnlyCb.addEventListener("change", function () {
@@ -124,5 +185,23 @@ $js = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUB
   }
   window.addEventListener("resize", redrawMembersGrid);
   window.requestAnimationFrame(redrawMembersGrid);
+
+  if (typeof table.on === "function") {
+    table.on("dataSorted", function () {
+      const sorters = table.getSorters ? table.getSorters() : [];
+      if (sorters && sorters.length > 0) {
+        const sb = form.querySelector('[name="sort_by"]');
+        const sd = form.querySelector('[name="sort_dir"]');
+        if (sb) {
+          sb.value = sorters[0].field;
+        }
+        if (sd) {
+          sd.value = sorters[0].dir;
+        }
+      }
+      syncExportLinks();
+    });
+  }
+  syncExportLinks();
 })();
 </script>

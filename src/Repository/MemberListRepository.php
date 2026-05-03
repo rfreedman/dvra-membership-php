@@ -129,6 +129,34 @@ final class MemberListRepository
      */
     public function listRowsForTabulator(array $p, string $urlBase): array
     {
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->fetchFilteredMemberJoinRows($p);
+
+        return array_map(fn (array $r): array => array_merge($this->mapJoinedRowForUi($r), [
+            'actions_html' => self::actionsHtml((int) $r['id'], self::normalizedBase($urlBase)),
+        ]), $rows);
+    }
+
+    /**
+     * Same row set/order as the members grid minus Actions (for CSV / Excel / PDF).
+     *
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     * @return list<array<string, mixed>>
+     */
+    public function listRowsForExport(array $p): array
+    {
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->fetchFilteredMemberJoinRows($p);
+
+        return array_map(fn (array $r): array => $this->mapJoinedRowForUi($r), $rows);
+    }
+
+    /**
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     * @return list<array<string, mixed>>
+     */
+    private function fetchFilteredMemberJoinRows(array $p): array
+    {
         [$where, $bind] = self::filterClause([
             'search' => $p['search'],
             'membership_type_id' => $p['membership_type_id'],
@@ -138,7 +166,6 @@ final class MemberListRepository
         ], $this->todayIso());
 
         $order = self::orderBySql($p['sort_by'], $p['sort_dir']);
-        $base = self::normalizedBase($urlBase);
 
         $sql = <<<SQL
             SELECT m.id AS id,
@@ -165,43 +192,49 @@ final class MemberListRepository
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($bind);
-        /** @var list<array<string, mixed>> $rows */
-        $rows = $stmt->fetchAll();
 
-        return array_map(function (array $r) use ($base): array {
-            $id = (int) $r['id'];
-            $lcName = isset($r['lc_name']) ? (string) $r['lc_name'] : '';
-            $lcLabel = isset($r['lc_label']) && $r['lc_label'] !== null ? (string) $r['lc_label'] : '';
-            $mtName = isset($r['mt_name']) ? (string) $r['mt_name'] : '';
-            $mtLabel = isset($r['mt_label']) && $r['mt_label'] !== null ? (string) $r['mt_label'] : '';
+        return $stmt->fetchAll();
+    }
 
-            $call = isset($r['call_sign']) && $r['call_sign'] !== null ? (string) $r['call_sign'] : '';
-            $callUpper = strtoupper(trim($call));
+    /**
+     * Mirrors Tabulator-visible fields (excluding Actions HTML).
+     *
+     * @param array<string, mixed> $r
+     * @return array<string, mixed>
+     */
+    private function mapJoinedRowForUi(array $r): array
+    {
+        $id = (int) $r['id'];
+        $lcName = isset($r['lc_name']) ? (string) $r['lc_name'] : '';
+        $lcLabel = isset($r['lc_label']) && $r['lc_label'] !== null ? (string) $r['lc_label'] : '';
+        $mtName = isset($r['mt_name']) ? (string) $r['mt_name'] : '';
+        $mtLabel = isset($r['mt_label']) && $r['mt_label'] !== null ? (string) $r['mt_label'] : '';
 
-            return [
-                'id' => $id,
-                'call_sign' => $callUpper,
-                'last_name' => isset($r['last_name']) ? (string) $r['last_name'] : '',
-                'first_name' => isset($r['first_name']) ? (string) $r['first_name'] : '',
-                'email' => isset($r['email']) && $r['email'] !== null ? (string) $r['email'] : '',
-                'phone' => isset($r['phone']) && $r['phone'] !== null ? (string) $r['phone'] : '',
-                'address_street' => isset($r['address_street']) && $r['address_street'] !== null
-                    ? (string) $r['address_street'] : '',
-                'address_city' => isset($r['address_city']) && $r['address_city'] !== null
-                    ? (string) $r['address_city'] : '',
-                'address_state' => isset($r['address_state']) && $r['address_state'] !== null
-                    ? (string) $r['address_state'] : '',
-                'address_zip' => isset($r['address_zip']) && $r['address_zip'] !== null
-                    ? (string) $r['address_zip'] : '',
-                'license_class' => self::referenceLabel($lcName !== '' ? $lcName : null, $lcLabel !== '' ? $lcLabel : null),
-                'membership_type' => self::referenceLabel($mtName !== '' ? $mtName : null, $mtLabel !== '' ? $mtLabel : null),
-                'arrl_member' => (bool) ($r['arrl_member'] ?? 0),
-                'key_number' => isset($r['key_number']) && $r['key_number'] !== null ? (int) $r['key_number'] : null,
-                'paid_through' => isset($r['paid_through']) && $r['paid_through'] !== null
-                    ? (string) $r['paid_through'] : '',
-                'actions_html' => self::actionsHtml($id, $base),
-            ];
-        }, $rows);
+        $call = isset($r['call_sign']) && $r['call_sign'] !== null ? (string) $r['call_sign'] : '';
+        $callUpper = strtoupper(trim($call));
+
+        return [
+            'id' => $id,
+            'call_sign' => $callUpper,
+            'last_name' => isset($r['last_name']) ? (string) $r['last_name'] : '',
+            'first_name' => isset($r['first_name']) ? (string) $r['first_name'] : '',
+            'email' => isset($r['email']) && $r['email'] !== null ? (string) $r['email'] : '',
+            'phone' => isset($r['phone']) && $r['phone'] !== null ? (string) $r['phone'] : '',
+            'address_street' => isset($r['address_street']) && $r['address_street'] !== null
+                ? (string) $r['address_street'] : '',
+            'address_city' => isset($r['address_city']) && $r['address_city'] !== null
+                ? (string) $r['address_city'] : '',
+            'address_state' => isset($r['address_state']) && $r['address_state'] !== null
+                ? (string) $r['address_state'] : '',
+            'address_zip' => isset($r['address_zip']) && $r['address_zip'] !== null
+                ? (string) $r['address_zip'] : '',
+            'license_class' => self::referenceLabel($lcName !== '' ? $lcName : null, $lcLabel !== '' ? $lcLabel : null),
+            'membership_type' => self::referenceLabel($mtName !== '' ? $mtName : null, $mtLabel !== '' ? $mtLabel : null),
+            'arrl_member' => (bool) ($r['arrl_member'] ?? 0),
+            'key_number' => isset($r['key_number']) && $r['key_number'] !== null ? (int) $r['key_number'] : null,
+            'paid_through' => isset($r['paid_through']) && $r['paid_through'] !== null
+                ? (string) $r['paid_through'] : '',
+        ];
     }
 
     public static function tabulatorJsonFromRows(array $rows): string
@@ -257,15 +290,12 @@ final class MemberListRepository
         $search = $f['search'] ?? '';
         if ($search !== '') {
             $needle = '%' . self::escapeLike($search) . '%';
+            /** Search-only fields: names, call sign, email (no phone or mailing address columns). */
             $likeCols = [
                 'COALESCE(m.last_name, \'\')',
                 'COALESCE(m.first_name, \'\')',
                 'COALESCE(m.call_sign, \'\')',
                 'COALESCE(m.email, \'\')',
-                'COALESCE(m.address_street, \'\')',
-                'COALESCE(m.address_city, \'\')',
-                'COALESCE(m.address_state, \'\')',
-                'COALESCE(m.address_zip, \'\')',
             ];
             $sub = [];
             foreach ($likeCols as $expr) {
@@ -295,12 +325,43 @@ final class MemberListRepository
             $parts[] = 'm.key_number IS NULL';
         }
 
-        if (($f['current_only'] ?? '') === 'yes') {
-            $parts[] = '(m.paid_through IS NOT NULL AND m.paid_through >= ?)';
+        $currentOnlyFlag = strtolower(trim((string) ($f['current_only'] ?? 'yes')));
+        if ($currentOnlyFlag !== 'no') {
+            $parts[] = '(m.paid_through IS NOT NULL AND date(m.paid_through) >= date(?))';
             $bind[] = $todayIso;
         }
 
         return [implode(' AND ', $parts), $bind];
+    }
+
+    /**
+     * Canonical GET query representing the parsed list/export parameters (deterministic ordering for links).
+     *
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     */
+    public static function listParamsToQueryInput(array $p): array
+    {
+        $q = [
+            'sort_by' => $p['sort_by'],
+            'sort_dir' => $p['sort_dir'],
+            'current_only' => $p['current_only'],
+            'search' => $p['search'],
+            'arrl' => $p['arrl'],
+            'has_key' => $p['has_key'],
+        ];
+        if ($p['membership_type_id'] !== null) {
+            $q['membership_type_id'] = $p['membership_type_id'];
+        }
+
+        return $q;
+    }
+
+    /** @param array<string, mixed> $p Same shape as parseListQuery output */
+    public static function buildExportQueryString(array $p): string
+    {
+        $qs = http_build_query(self::listParamsToQueryInput($p));
+
+        return $qs === '' ? '' : ('?' . $qs);
     }
 
     private static function escapeLike(string $needle): string

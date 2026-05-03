@@ -7,7 +7,9 @@ use DvraMembership\Repository\MemberListRepository;
 use DvraMembership\Repository\MemberRepository;
 use DvraMembership\Repository\PaymentRepository;
 use DvraMembership\Support\AdminSeed;
+use DvraMembership\Support\MemberExport;
 use DvraMembership\Support\MemberInputNormalizer;
+use DvraMembership\Support\MemberListExportParams;
 use DvraMembership\Support\PdoFactory;
 use DvraMembership\Support\Schema;
 use DvraMembership\Support\Settings;
@@ -46,6 +48,8 @@ $urlBase = MemberListRepository::normalizedBase($basePath);
 $pdo = PdoFactory::create($settings);
 Schema::ensure($pdo);
 AdminSeed::ensureBootstrapAdmin($pdo, $settings);
+
+$memberListRepo = new MemberListRepository($pdo);
 
 $app = AppFactory::create();
 if ($basePath !== '') {
@@ -138,9 +142,9 @@ $app->post('/logout', function (Request $request, Response $response): Response 
 
 $tabulatorCss = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2/dist/css/tabulator.min.css">';
 
-$app->get('/', function (Request $request, Response $response) use ($pdo, $wrapHtml, $htmlResponse, $urlBase, $tabulatorCss): Response {
+$app->get('/', function (Request $request, Response $response) use ($memberListRepo, $wrapHtml, $htmlResponse, $urlBase, $tabulatorCss): Response {
     $params = MemberListRepository::parseListQuery($request->getQueryParams());
-    $repo = new MemberListRepository($pdo);
+    MemberListExportParams::persistFromParsed($params);
     $filter = [
         'search' => $params['search'],
         'membership_type_id' => $params['membership_type_id'],
@@ -148,18 +152,24 @@ $app->get('/', function (Request $request, Response $response) use ($pdo, $wrapH
         'has_key' => $params['has_key'],
         'current_only' => $params['current_only'],
     ];
-    $total = $repo->countMembers($filter);
-    $tabulatorRows = $repo->listRowsForTabulator(array_merge($filter, [
+    $total = $memberListRepo->countMembers($filter);
+    $tabulatorRows = $memberListRepo->listRowsForTabulator(array_merge($filter, [
         'sort_by' => $params['sort_by'],
         'sort_dir' => $params['sort_dir'],
     ]), $urlBase);
     $membersJson = MemberListRepository::tabulatorJsonFromRows($tabulatorRows);
 
-    $qs = $request->getUri()->getQuery();
-    $exportQuery = $qs !== '' ? '?' . $qs : '';
+    $exportQuery = MemberListRepository::buildExportQueryString($params);
+    $listParamsExportJsonRaw = json_encode(
+        MemberListRepository::listParamsToQueryInput($params),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT,
+    );
+    $listParamsForExportJson = $listParamsExportJsonRaw !== false ? $listParamsExportJsonRaw : '{}';
+
     $clearFiltersHref = ($urlBase === '' ? '' : $urlBase) . '/?' . http_build_query([
         'sort_by' => $params['sort_by'],
         'sort_dir' => $params['sort_dir'],
+        'current_only' => 'yes',
     ]);
 
     $inner = View::render('home', [
@@ -171,7 +181,7 @@ $app->get('/', function (Request $request, Response $response) use ($pdo, $wrapH
         'arrl' => $params['arrl'],
         'has_key' => $params['has_key'],
         'current_only' => $params['current_only'],
-        'membership_types' => $repo->listMembershipTypes(),
+        'membership_types' => $memberListRepo->listMembershipTypes(),
         'clearFiltersHref' => $clearFiltersHref,
         'exportQuery' => $exportQuery,
         'base' => $urlBase,
@@ -180,6 +190,8 @@ $app->get('/', function (Request $request, Response $response) use ($pdo, $wrapH
         'membersJson' => $membersJson,
         'sort_by' => $params['sort_by'],
         'sort_dir' => $params['sort_dir'],
+        'base' => $urlBase,
+        'listParamsForExportJson' => $listParamsForExportJson,
     ]);
     $body = $wrapHtml($inner, 'Members', [
         'authenticated' => true,
@@ -191,6 +203,48 @@ $app->get('/', function (Request $request, Response $response) use ($pdo, $wrapH
 
     return $htmlResponse($response, $body);
 })->add($authMiddleware);
+
+$sendMemberExport = static function (Response $response, string $format, string $payload): Response {
+    $stem = MemberExport::fileStem();
+    [$contentType, $ext] = match ($format) {
+        'csv' => ['text/csv; charset=utf-8', 'csv'],
+        'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'],
+        'pdf' => ['application/pdf', 'pdf'],
+        default => ['application/octet-stream', 'bin'],
+    };
+    $name = "{$stem}.{$ext}";
+    $response->getBody()->write($payload);
+
+    return $response
+        ->withHeader('Content-Type', $contentType)
+        ->withHeader('Content-Disposition', 'attachment; filename="' . str_replace(['"', '\\'], '', $name) . '"');
+};
+
+$runMemberExport = static function (string $format) use ($memberListRepo, $sendMemberExport): callable {
+    return function (Request $request, Response $response) use (
+        $memberListRepo,
+        $format,
+        $sendMemberExport
+    ): Response {
+        $params = MemberListExportParams::resolveForExport($request);
+        $rows = $memberListRepo->listRowsForExport($params);
+
+        $binary = match ($format) {
+            'csv' => MemberExport::toCsvBinary($rows),
+            'xlsx' => MemberExport::toXlsxBinary($rows),
+            'pdf' => MemberExport::toPdfBinary($rows),
+            default => '',
+        };
+
+        return $binary !== ''
+            ? $sendMemberExport($response, $format, $binary)
+            : $response->withStatus(404);
+    };
+};
+
+$app->get('/members/export.csv', $runMemberExport('csv'))->add($authMiddleware);
+$app->get('/members/export.xlsx', $runMemberExport('xlsx'))->add($authMiddleware);
+$app->get('/members/export.pdf', $runMemberExport('pdf'))->add($authMiddleware);
 
 $membersRepo = new MemberRepository($pdo);
 $paymentsRepo = new PaymentRepository($pdo);

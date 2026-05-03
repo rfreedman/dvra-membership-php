@@ -371,9 +371,12 @@ h2 {
   margin-bottom: 0.75rem;
 }
 
+.members-scope-panel {
+  margin-bottom: 0.75rem;
+}
+
 .members-scope-switch {
   font-family: var(--font-ui);
-  grid-column: 1 / -1;
   max-width: 28rem;
 }
 
@@ -455,6 +458,11 @@ h2 {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
   flex-shrink: 0;
   transition: transform 0.2s ease;
+}
+
+.members-scope-panel .filter-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.9em;
 }
 
 .filter-grid .filter-hint {

@@ -33,8 +33,30 @@ $membershipBlankSel = static function (?int $sel): string {
     <form method="get" action="<?= $h($base . '/') ?>" class="filter-form" id="members-filter-form">
       <input type="hidden" name="sort_by" value="<?= $h((string) $sort_by) ?>">
       <input type="hidden" name="sort_dir" value="<?= $h((string) $sort_dir) ?>">
+      <div class="members-scope-panel">
+        <div class="members-scope-switch" id="members-scope-switch">
+          <input type="hidden" name="current_only" id="members-current-only-field" value="<?= $h((string) $current_only) ?>">
+          <div class="members-scope-switch-row">
+            <span class="members-scope-caption members-scope-caption--current">Current members</span>
+            <label class="switch-widget">
+              <input
+                type="checkbox"
+                class="switch-widget-input"
+                id="members-current-only-cb"
+                <?= $current_only === 'yes' ? 'checked' : '' ?>
+                aria-label="Member list: current members only, or all members"
+              >
+              <span class="switch-widget-track" aria-hidden="true">
+                <span class="switch-widget-thumb"></span>
+              </span>
+            </label>
+            <span class="members-scope-caption members-scope-caption--all">All members</span>
+          </div>
+        </div>
+        <p class="muted filter-hint">Current means paid through today or later.</p>
+      </div>
       <div class="filter-grid">
-        <label>Search <input type="text" name="search" value="<?= $h((string) $search) ?>" placeholder="Name, call, email, mailing address"></label>
+        <label>Search <input type="text" name="search" value="<?= $h((string) $search) ?>" placeholder="Name, call sign, email"></label>
         <label>Membership type
           <select name="membership_type_id">
             <option value=""<?= $membershipBlankSel($membership_type_id) ?>>Any</option>
@@ -60,26 +82,6 @@ $membershipBlankSel = static function (?int $sel): string {
             <option value="no"<?= $has_key === 'no' ? ' selected' : '' ?>>No key #</option>
           </select>
         </label>
-        <div class="members-scope-switch" id="members-scope-switch">
-          <input type="hidden" name="current_only" id="members-current-only-field" value="<?= $h((string) $current_only) ?>">
-          <div class="members-scope-switch-row">
-            <span class="members-scope-caption members-scope-caption--current">Current members</span>
-            <label class="switch-widget">
-              <input
-                type="checkbox"
-                class="switch-widget-input"
-                id="members-current-only-cb"
-                <?= $current_only === 'yes' ? 'checked' : '' ?>
-                aria-label="Member list: current members only, or all members"
-              >
-              <span class="switch-widget-track" aria-hidden="true">
-                <span class="switch-widget-thumb"></span>
-              </span>
-            </label>
-            <span class="members-scope-caption members-scope-caption--all">All members</span>
-          </div>
-        </div>
-        <p class="muted filter-hint">Current means paid through today or later.</p>
       </div>
       <div class="filter-form-actions">
         <button type="submit">Apply filters</button>
@@ -89,11 +91,11 @@ $membershipBlankSel = static function (?int $sel): string {
     <div class="results-and-export-row">
       <p class="results-meta"><?= $h((string) $total) ?> member<?= (int) $total !== 1 ? 's' : '' ?></p>
       <p class="muted export-links">Export matching members:
-        <a href="<?= $h($base . '/members/export.xlsx' . $exportQuery) ?>">Excel</a>
+        <a id="members-export-link-xlsx" class="members-export-link" href="<?= $h($base . '/members/export.xlsx' . $exportQuery) ?>">Excel</a>
         <span aria-hidden="true">·</span>
-        <a href="<?= $h($base . '/members/export.csv' . $exportQuery) ?>">CSV</a>
+        <a id="members-export-link-csv" class="members-export-link" href="<?= $h($base . '/members/export.csv' . $exportQuery) ?>">CSV</a>
         <span aria-hidden="true">·</span>
-        <a href="<?= $h($base . '/members/export.pdf' . $exportQuery) ?>">PDF</a>
+        <a id="members-export-link-pdf" class="members-export-link" href="<?= $h($base . '/members/export.pdf' . $exportQuery) ?>">PDF</a>
       </p>
     </div>
   </div>
