@@ -25,7 +25,6 @@ final class MemberListRepository
         'license_class',
         'membership_type',
         'arrl_member',
-        'key_number',
         'paid_through',
     ];
 
@@ -41,7 +40,6 @@ final class MemberListRepository
      *   search: string,
      *   membership_type_id: int|null,
      *   arrl: string,
-     *   has_key: string,
      *   current_only: string,
      * }
      */
@@ -61,7 +59,6 @@ final class MemberListRepository
         }
 
         $arrl = isset($qp['arrl']) ? trim((string) $qp['arrl']) : '';
-        $hasKey = isset($qp['has_key']) ? trim((string) $qp['has_key']) : '';
 
         $co = $qp['current_only'] ?? null;
         if (\is_array($co)) {
@@ -78,7 +75,6 @@ final class MemberListRepository
             'search' => $search,
             'membership_type_id' => $membershipTypeId,
             'arrl' => $arrl === 'yes' || $arrl === 'no' ? $arrl : '',
-            'has_key' => $hasKey === 'yes' || $hasKey === 'no' ? $hasKey : '',
             'current_only' => $currentOnly,
         ];
     }
@@ -109,7 +105,7 @@ final class MemberListRepository
     }
 
     /**
-     * @param array{search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $f
+     * @param array{search: string, membership_type_id: int|null, arrl: string, current_only: string} $f
      */
     public function countMembers(array $f): int
     {
@@ -124,7 +120,7 @@ final class MemberListRepository
     /**
      * Rows shaped for Tabulator + JSON embedding (already encoded separately by caller).
      *
-     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, current_only: string} $p
      * @return list<array<string, mixed>>
      */
     public function listRowsForTabulator(array $p, string $urlBase): array
@@ -140,7 +136,7 @@ final class MemberListRepository
     /**
      * Same row set/order as the members grid minus Actions (for CSV / Excel / PDF).
      *
-     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, current_only: string} $p
      * @return list<array<string, mixed>>
      */
     public function listRowsForExport(array $p): array
@@ -152,7 +148,7 @@ final class MemberListRepository
     }
 
     /**
-     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, current_only: string} $p
      * @return list<array<string, mixed>>
      */
     private function fetchFilteredMemberJoinRows(array $p): array
@@ -161,7 +157,6 @@ final class MemberListRepository
             'search' => $p['search'],
             'membership_type_id' => $p['membership_type_id'],
             'arrl' => $p['arrl'],
-            'has_key' => $p['has_key'],
             'current_only' => $p['current_only'],
         ], $this->todayIso());
 
@@ -318,13 +313,6 @@ final class MemberListRepository
             $parts[] = 'm.arrl_member = 0';
         }
 
-        $hasKey = $f['has_key'] ?? '';
-        if ($hasKey === 'yes') {
-            $parts[] = 'm.key_number IS NOT NULL';
-        } elseif ($hasKey === 'no') {
-            $parts[] = 'm.key_number IS NULL';
-        }
-
         $currentOnlyFlag = strtolower(trim((string) ($f['current_only'] ?? 'yes')));
         if ($currentOnlyFlag !== 'no') {
             $parts[] = '(m.paid_through IS NOT NULL AND date(m.paid_through) >= date(?))';
@@ -337,7 +325,7 @@ final class MemberListRepository
     /**
      * Canonical GET query representing the parsed list/export parameters (deterministic ordering for links).
      *
-     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, has_key: string, current_only: string} $p
+     * @param array{sort_by: string, sort_dir: string, search: string, membership_type_id: int|null, arrl: string, current_only: string} $p
      */
     public static function listParamsToQueryInput(array $p): array
     {
@@ -347,7 +335,6 @@ final class MemberListRepository
             'current_only' => $p['current_only'],
             'search' => $p['search'],
             'arrl' => $p['arrl'],
-            'has_key' => $p['has_key'],
         ];
         if ($p['membership_type_id'] !== null) {
             $q['membership_type_id'] = $p['membership_type_id'];
@@ -398,7 +385,6 @@ final class MemberListRepository
             'address_state' => "(m.address_state) IS NULL, m.address_state {$dir}{$tail}",
             'address_zip' => "(m.address_zip) IS NULL, m.address_zip {$dir}{$tail}",
             'paid_through' => "(m.paid_through) IS NULL, m.paid_through {$dir}{$tail}",
-            'key_number' => "(m.key_number) IS NULL, m.key_number {$dir}{$tail}",
             'membership_type' => "(mt.name) IS NULL, mt.name {$dir}{$tail}",
             'license_class' => "(lc.name) IS NULL, lc.name {$dir}{$tail}",
             'arrl_member' => "m.arrl_member {$dir}{$tail}",

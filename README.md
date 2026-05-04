@@ -2,7 +2,7 @@
 
 Standalone **PHP** scaffold (not part of any Python repo). Intended for deployment on **shared hosting** alongside other PHP—no long-lived application server required.
 
-Uses **Slim 4**. **`/`**: Tabulator grid with filters/sort (Python-aligned). **`/members/new`**, **`/members/{id}/view`** (single-form edit), **`POST …/delete`**, validations (duplicate call sign, duplicate name-without-call, unique key number), unsaved-change guard + delete confirm mirroring Python. **`/members/{id}/payments`**: add payment dialog; inline row edits (`POST /payments/{id}/edit`); delete (`POST /payments/{id}/delete`); **`members.paid_through`** recomputed as **`MAX(payments.paid_through)`** after each change (NULL when no payments). Still not ported: spreadsheet import, JSON REST API, CSV/XLSX/PDF routes, reports, admin/reference screens (export links on `/` still 404).
+Uses **Slim 4**. **`/`**: Tabulator grid with filters/sort (Python-aligned). **`/members/new`**, **`/members/{id}/view`** (single-form edit), **`POST …/delete`**, validations (duplicate call sign, duplicate name-without-call, unique key number), unsaved-change guard + delete confirm mirroring Python. **`/members/{id}/payments`**: add payment dialog; inline row edits (`POST /payments/{id}/edit`); delete (`POST /payments/{id}/delete`); **`members.paid_through`** recomputed as **`MAX(payments.paid_through)`** after each change (NULL when no payments). **Spreadsheet import** is not implemented in PHP; a **one-off Python subtree** for dev and prod DB initialization lives under **`python-import/`** (see that README—intended only for initial roster load, not routine hosting). Still not ported: JSON REST API, CSV/XLSX/PDF routes, reports, admin/reference screens (export links on `/` still 404).
 
 Shared UI assets (`public/static/style.css`, `w2zq-site-icon-gold.png`) are **copies**; when you change branding in one stack, update the other manually if you want them to match.
 
@@ -46,3 +46,15 @@ Point **DocumentRoot** at **`public/`** and allow **`public/.htaccess`** rewrite
 ## Schema
 
 See **`database/schema.sqlite.sql`** (SQLite). For MySQL/MariaDB on shared hosting, translate types and the partial unique index on **`members.call_sign`**.
+
+### Python `python-import/` (one-off only)
+
+Spreadsheet import is **not** in the PHP app. The **`python-import/`** directory is a copied Python importer for the **same schema**, intended **only** as a **one-off** during development and **production initialization** (first roster load). It is **not** a routine dependency after the database is populated. Instructions: **`python-import/README.md`**.
+
+Member **`phone`** values are normalized to US **`NXX-NXX-XXXX`** via **`MemberInputNormalizer`** on web forms, and **`MemberRepository::insertMember` / `updateMember`** always run the same normalizer on `phone` before writing—so spreadsheet or bulk imports that use those methods get consistent storage (non‑US / non‑10‑digit → **`NULL`**).
+
+To rewrite existing rows (e.g. after restoring a DB dump):
+
+```bash
+php scripts/normalize_member_phones.php
+```

@@ -79,7 +79,6 @@ final class MemberListRepositoryExportConsistencyTest extends TestCase
             'search' => $p['search'],
             'membership_type_id' => $p['membership_type_id'],
             'arrl' => $p['arrl'],
-            'has_key' => $p['has_key'],
             'current_only' => $p['current_only'],
         ];
         $n = $repo->countMembers($filter);
@@ -100,7 +99,6 @@ final class MemberListRepositoryExportConsistencyTest extends TestCase
             'search' => $p['search'],
             'membership_type_id' => $p['membership_type_id'],
             'arrl' => $p['arrl'],
-            'has_key' => $p['has_key'],
             'current_only' => $p['current_only'],
         ];
         $n = $repo->countMembers($filter);

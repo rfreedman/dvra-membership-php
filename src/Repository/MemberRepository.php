@@ -164,9 +164,23 @@ final class MemberRepository
         }
     }
 
+    /**
+     * Ensures phone is NXX-NXX-XXXX or null for any code path (forms, spreadsheet/API import) that
+     * passes raw strings into insertMember / updateMember.
+     *
+     * @param array<string, mixed> $data
+     */
+    private static function coerceMemberRowPhoneForPersist(array &$data): void
+    {
+        $raw = $data['phone'] ?? null;
+        $asString = $raw !== null && $raw !== '' ? (string) $raw : null;
+        $data['phone'] = MemberInputNormalizer::normalizePhoneUsTenDigit($asString);
+    }
+
     /** @param array $data Output of MemberInputNormalizer::memberCreateFromForm */
     public function insertMember(array $data): int
     {
+        self::coerceMemberRowPhoneForPersist($data);
         $this->enforceUniqueKeyNumber($data['key_number'], null);
 
         $stmt = $this->pdo->prepare(
@@ -200,6 +214,7 @@ final class MemberRepository
     /** @throws DuplicateMemberKeyNumber */
     public function updateMember(int $id, array $data): void
     {
+        self::coerceMemberRowPhoneForPersist($data);
         $this->enforceUniqueKeyNumber($data['key_number'], $id);
 
         $stmt = $this->pdo->prepare(
@@ -269,5 +284,36 @@ final class MemberRepository
         }
 
         return $out;
+    }
+
+    /**
+     * Set each non-empty members.phone to NXX-NXX-XXXX when digits form a US 10-digit number (optional leading 1).
+     * Values that do not normalize are set to NULL.
+     *
+     * @return int Rows updated (including clears)
+     */
+    public function normalizeStoredMemberPhonesToUsTenDigit(): int
+    {
+        $stmt = $this->pdo->query(
+            "SELECT id, phone FROM members WHERE phone IS NOT NULL AND TRIM(phone) <> ''"
+        );
+        if ($stmt === false) {
+            return 0;
+        }
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $upd = $this->pdo->prepare('UPDATE members SET phone = ? WHERE id = ?');
+        $changed = 0;
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+            $raw = (string) $row['phone'];
+            $next = MemberInputNormalizer::normalizePhoneUsTenDigit($raw);
+            if ($next !== $raw) {
+                $upd->execute([$next, $id]);
+                ++$changed;
+            }
+        }
+
+        return $changed;
     }
 }

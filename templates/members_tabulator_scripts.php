@@ -3,9 +3,8 @@
 /** @var string $sort_by */
 /** @var string $sort_dir */
 /** @var string $base */
-/** @var string $listParamsForExportJson */
+/** @var string $membersSortTouchUrl */
 $js = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-$listParamsBase = $listParamsForExportJson ?? '{}';
 ?>
 <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2/dist/js/tabulator.min.js"></script>
 <script>
@@ -14,7 +13,7 @@ $listParamsBase = $listParamsForExportJson ?? '{}';
   const SERVER_SORT_BY = "<?= $js((string) $sort_by) ?>";
   const SERVER_SORT_DIR = "<?= $js((string) $sort_dir) ?>";
   const APP_BASE = "<?= $js((string) ($base ?? "")) ?>";
-  const LIST_PARAMS_BASE = <?= $listParamsBase ?>;
+  const MEMBERS_SORT_TOUCH_URL = "<?= $js((string) ($membersSortTouchUrl ?? "")) ?>";
 
   const dash = "—";
   const form = document.getElementById("members-filter-form");
@@ -25,59 +24,36 @@ $listParamsBase = $listParamsForExportJson ?? '{}';
     currentOnlyField.value = currentOnlyCb.checked ? "yes" : "no";
   }
 
-  function mergeListParamsWithLiveGrid() {
-    const p = {};
-    Object.assign(p, LIST_PARAMS_BASE);
-    const sorters =
-      typeof table.getSorters === "function"
-        ? table.getSorters()
-        : [];
-    if (sorters && sorters.length > 0) {
-      p.sort_by = sorters[0].field;
-      p.sort_dir = sorters[0].dir;
-    } else {
-      p.sort_by = SERVER_SORT_BY;
-      p.sort_dir = SERVER_SORT_DIR;
-    }
-    syncCurrentOnlyHiddenFromCheckbox();
-    p.current_only = currentOnlyField.value || "yes";
-    return p;
-  }
-
-  function buildMembersExportSearchParams(p) {
-    const q = new URLSearchParams();
-    q.set("sort_by", String(p.sort_by || ""));
-    q.set("sort_dir", String(p.sort_dir || ""));
-    q.set("current_only", p.current_only === "no" ? "no" : "yes");
-    q.set("search", p.search !== undefined ? String(p.search) : "");
-    q.set("arrl", p.arrl !== undefined ? String(p.arrl) : "");
-    q.set("has_key", p.has_key !== undefined ? String(p.has_key) : "");
-    if (
-      Object.prototype.hasOwnProperty.call(p, "membership_type_id") &&
-      p.membership_type_id !== undefined &&
-      p.membership_type_id !== "" &&
-      p.membership_type_id !== null
-    ) {
-      q.set(
-        "membership_type_id",
-        String(Number.isFinite(Number(p.membership_type_id)) ? Number(p.membership_type_id) : p.membership_type_id)
-      );
-    }
-    return q;
-  }
-
   function syncExportLinks() {
-    const p = mergeListParamsWithLiveGrid();
-    const qs = buildMembersExportSearchParams(p).toString();
-    const suffix = qs !== "" ? "?" + qs : "";
-    const paths = ["xlsx", "csv", "pdf"];
-    paths.forEach((ext) => {
+    ["xlsx", "csv", "pdf"].forEach(function (ext) {
       const link = document.getElementById("members-export-link-" + ext);
-      if (!link) {
-        return;
+      if (link) {
+        link.href = APP_BASE + "/members/export." + ext;
       }
-      link.href = APP_BASE + "/members/export." + ext + suffix;
     });
+  }
+
+  async function persistClientSortThenSyncExports() {
+    const sorters =
+      typeof table.getSorters === "function" ? table.getSorters() : [];
+    if (!sorters || sorters.length === 0 || !MEMBERS_SORT_TOUCH_URL) {
+      syncExportLinks();
+      return;
+    }
+    const body = new URLSearchParams();
+    body.set("sort_by", String(sorters[0].field));
+    body.set("sort_dir", String(sorters[0].dir));
+    try {
+      await fetch(MEMBERS_SORT_TOUCH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        credentials: "same-origin",
+      });
+    } catch (e) {
+      /* non-fatal */
+    }
+    syncExportLinks();
   }
 
   const table = new Tabulator("#members-grid", {
@@ -93,39 +69,70 @@ $listParamsBase = $listParamsForExportJson ?? '{}';
         headerSort: false,
         formatter: "html",
         hozAlign: "left",
-        minWidth: 180,
+        width: 124,
         cssClass: "members-tabulator-actions",
       },
       {
+        /* ~40% narrower than 151px; typical FCC call fits */
         title: "Call sign",
         field: "call_sign",
         sorter: "string",
-        minWidth: 90,
+        width: 91,
         formatter: (cell) => (cell.getValue() ? cell.getValue() : dash),
       },
-      { title: "Last name", field: "last_name", sorter: "string", minWidth: 100 },
-      { title: "First name", field: "first_name", sorter: "string", minWidth: 100 },
-      { title: "Email", field: "email", sorter: "string", minWidth: 140 },
-      { title: "Phone", field: "phone", sorter: "string", minWidth: 100 },
+      {
+        title: "Last name",
+        field: "last_name",
+        sorter: "string",
+        width: 151,
+      },
+      {
+        title: "First name",
+        field: "first_name",
+        sorter: "string",
+        width: 161,
+      },
+      {
+        title: "Paid through",
+        field: "paid_through",
+        sorter: "string",
+        width: 125,
+        cssClass: "members-col-fixed-data",
+        formatter: (cell) => cell.getValue() || "",
+      },
+      {
+        title: "Email",
+        field: "email",
+        sorter: "string",
+        width: 230,
+      },
+      {
+        title: "Phone",
+        field: "phone",
+        sorter: "string",
+        width: 130,
+        cssClass: "members-col-fixed-data",
+      },
       {
         title: "Street",
         field: "address_street",
         sorter: "string",
-        minWidth: 120,
+        width: 170,
         formatter: (cell) => (cell.getValue() ? cell.getValue() : dash),
       },
       {
         title: "City",
         field: "address_city",
         sorter: "string",
-        minWidth: 96,
+        width: 98,
         formatter: (cell) => (cell.getValue() ? cell.getValue() : dash),
       },
       {
-        title: "St",
+        title: "State",
         field: "address_state",
         sorter: "string",
-        width: 48,
+        width: 95,
+        cssClass: "members-col-fixed-data",
         hozAlign: "center",
         formatter: (cell) => (cell.getValue() ? cell.getValue() : dash),
       },
@@ -133,33 +140,35 @@ $listParamsBase = $listParamsForExportJson ?? '{}';
         title: "ZIP",
         field: "address_zip",
         sorter: "string",
-        width: 88,
+        width: 114,
+        cssClass: "members-col-fixed-data",
         formatter: (cell) => (cell.getValue() ? cell.getValue() : dash),
       },
-      { title: "License class", field: "license_class", sorter: "string", minWidth: 110 },
-      { title: "Membership type", field: "membership_type", sorter: "string", minWidth: 120 },
       {
+        /* Was 193px header heuristic; −40px total from that */
+        title: "License class",
+        field: "license_class",
+        sorter: "string",
+        width: 153,
+        cssClass: "members-col-ref-data",
+      },
+      {
+        /* initial width: 15 chars @ 8px + 56px sortable header chrome (title is 15 chars) */
+        title: "Membership type",
+        field: "membership_type",
+        sorter: "string",
+        width: 176,
+        cssClass: "members-col-ref-data",
+      },
+      {
+        /* initial width: 4 chars ("ARRL") @ 8px + 56px sortable header chrome */
         title: "ARRL",
         field: "arrl_member",
         sorter: "boolean",
+        width: 88,
+        cssClass: "members-col-ref-data",
         hozAlign: "center",
-        width: 72,
         formatter: (cell) => (cell.getValue() ? "yes" : "no"),
-      },
-      {
-        title: "Key #",
-        field: "key_number",
-        sorter: "number",
-        hozAlign: "right",
-        width: 72,
-        formatter: (cell) => (cell.getValue() === null || cell.getValue() === undefined ? "" : String(cell.getValue())),
-      },
-      {
-        title: "Paid through",
-        field: "paid_through",
-        sorter: "string",
-        minWidth: 110,
-        formatter: (cell) => cell.getValue() || "",
       },
     ],
     initialSort: [{ column: SERVER_SORT_BY, dir: SERVER_SORT_DIR }],
@@ -199,7 +208,7 @@ $listParamsBase = $listParamsForExportJson ?? '{}';
           sd.value = sorters[0].dir;
         }
       }
-      syncExportLinks();
+      void persistClientSortThenSyncExports();
     });
   }
   syncExportLinks();

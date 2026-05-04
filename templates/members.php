@@ -5,11 +5,9 @@ $h = static fn (?string $s): string => \DvraMembership\Support\View::e($s);
 /** @var string $sort_by */
 /** @var string $sort_dir */
 /** @var string $arrl */
-/** @var string $has_key */
 /** @var string $current_only */
 /** @var int|null $membership_type_id */
 /** @var list<array{id: int, name: ?string, label: ?string}> $membership_types */
-/** @var string $clearFiltersHref */
 /** @var string $exportQuery */
 $base = $base ?? '';
 
@@ -30,7 +28,7 @@ $membershipBlankSel = static function (?int $sel): string {
         <a class="btn-primary" href="<?= $h($base . '/members/new') ?>">New member</a>
       </div>
     </div>
-    <form method="get" action="<?= $h($base . '/') ?>" class="filter-form" id="members-filter-form">
+    <form method="post" action="<?= $h($base . '/') ?>" class="filter-form" id="members-filter-form">
       <input type="hidden" name="sort_by" value="<?= $h((string) $sort_by) ?>">
       <input type="hidden" name="sort_dir" value="<?= $h((string) $sort_dir) ?>">
       <div class="members-scope-panel">
@@ -75,17 +73,10 @@ $membershipBlankSel = static function (?int $sel): string {
             <option value="no"<?= $arrl === 'no' ? ' selected' : '' ?>>No</option>
           </select>
         </label>
-        <label>Key holder
-          <select name="has_key">
-            <option value=""<?= $has_key === '' ? ' selected' : '' ?>>Any</option>
-            <option value="yes"<?= $has_key === 'yes' ? ' selected' : '' ?>>Has key #</option>
-            <option value="no"<?= $has_key === 'no' ? ' selected' : '' ?>>No key #</option>
-          </select>
-        </label>
       </div>
       <div class="filter-form-actions">
         <button type="submit">Apply filters</button>
-        <a class="filter-clear" href="<?= $h($clearFiltersHref) ?>">Clear filters</a>
+        <button type="submit" name="reset_list_filters" value="1" class="filter-clear">Clear filters</button>
       </div>
     </form>
     <div class="results-and-export-row">

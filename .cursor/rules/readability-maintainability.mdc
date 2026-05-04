@@ -1,0 +1,13 @@
+---
+description: Prefer human readability and maintainability; efficiency matters but is secondary
+alwaysApply: true
+---
+
+# Readability and maintainability first
+
+For **all code** in this repository:
+
+- **Human readability and human maintainability take priority** over micro-optimizations, clever one-liners, or dense abstractions that save a few lines but obscure intent.
+- **Efficiency still matters**: avoid obvious waste (N+1 queries, unbounded memory, pointless duplication of heavy work) and fix real bottlenecks when they show up—but do not sacrifice clarity pre-emptively for speculative speed gains.
+- Prefer **clear names**, **straight-line control flow**, **small focused functions**, and **obvious data shapes** over tricks that require a comment to decode.
+- When a tradeoff is unavoidable, **choose the option future readers (including your future self) will understand fastest**, and document only non-obvious invariants or constraints briefly.

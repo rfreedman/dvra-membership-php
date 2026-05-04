@@ -3,3 +3,7 @@
 /var/*.sqlite
 /var/*.db
 /.env
+/python-import/.venv/
+__pycache__/
+*.py[cod]
+.phpunit.cache/

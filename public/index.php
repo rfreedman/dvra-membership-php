@@ -6,10 +6,16 @@ use DvraMembership\Repository\DuplicateMemberKeyNumber;
 use DvraMembership\Repository\MemberListRepository;
 use DvraMembership\Repository\MemberRepository;
 use DvraMembership\Repository\PaymentRepository;
+use DvraMembership\Repository\PaymentsReportRepository;
+use DvraMembership\Repository\ReportsRepository;
 use DvraMembership\Support\AdminSeed;
 use DvraMembership\Support\MemberExport;
 use DvraMembership\Support\MemberInputNormalizer;
+use DvraMembership\Support\KeyholdersReportParams;
 use DvraMembership\Support\MemberListExportParams;
+use DvraMembership\Support\PaymentsReportExport;
+use DvraMembership\Support\PaymentsReportExportParams;
+use DvraMembership\Support\StaticRosterExports;
 use DvraMembership\Support\PdoFactory;
 use DvraMembership\Support\Schema;
 use DvraMembership\Support\Settings;
@@ -50,6 +56,8 @@ Schema::ensure($pdo);
 AdminSeed::ensureBootstrapAdmin($pdo, $settings);
 
 $memberListRepo = new MemberListRepository($pdo);
+$paymentsReportRepo = new PaymentsReportRepository($pdo);
+$reportsRepo = new ReportsRepository($pdo);
 
 $app = AppFactory::create();
 if ($basePath !== '') {
@@ -142,14 +150,23 @@ $app->post('/logout', function (Request $request, Response $response): Response 
 
 $tabulatorCss = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2/dist/css/tabulator.min.css">';
 
+$app->post('/', function (Request $request, Response $response) use ($urlBase): Response {
+    $flat = MemberListExportParams::mergedFlatAfterMemberListPost($request->getParsedBody() ?? []);
+    $params = MemberListRepository::parseListQuery($flat);
+    MemberListExportParams::persistFromParsed($params);
+    $loc = ($urlBase === '' ? '' : $urlBase) . '/';
+
+    return $response->withStatus(303)->withHeader('Location', $loc);
+})->add($authMiddleware);
+
 $app->get('/', function (Request $request, Response $response) use ($memberListRepo, $wrapHtml, $htmlResponse, $urlBase, $tabulatorCss): Response {
-    $params = MemberListRepository::parseListQuery($request->getQueryParams());
+    unset($request);
+    $params = MemberListRepository::parseListQuery(MemberListExportParams::persistedMembersListQueryInput());
     MemberListExportParams::persistFromParsed($params);
     $filter = [
         'search' => $params['search'],
         'membership_type_id' => $params['membership_type_id'],
         'arrl' => $params['arrl'],
-        'has_key' => $params['has_key'],
         'current_only' => $params['current_only'],
     ];
     $total = $memberListRepo->countMembers($filter);
@@ -159,39 +176,27 @@ $app->get('/', function (Request $request, Response $response) use ($memberListR
     ]), $urlBase);
     $membersJson = MemberListRepository::tabulatorJsonFromRows($tabulatorRows);
 
-    $exportQuery = MemberListRepository::buildExportQueryString($params);
-    $listParamsExportJsonRaw = json_encode(
-        MemberListRepository::listParamsToQueryInput($params),
-        JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT,
-    );
-    $listParamsForExportJson = $listParamsExportJsonRaw !== false ? $listParamsExportJsonRaw : '{}';
+    $exportQuery = '';
+    $membersSortTouchUrl = ($urlBase === '' ? '' : $urlBase) . '/members/session-touch';
 
-    $clearFiltersHref = ($urlBase === '' ? '' : $urlBase) . '/?' . http_build_query([
-        'sort_by' => $params['sort_by'],
-        'sort_dir' => $params['sort_dir'],
-        'current_only' => 'yes',
-    ]);
-
-    $inner = View::render('home', [
+    $inner = View::render('members', [
         'total' => $total,
         'search' => $params['search'],
         'sort_by' => $params['sort_by'],
         'sort_dir' => $params['sort_dir'],
         'membership_type_id' => $params['membership_type_id'],
         'arrl' => $params['arrl'],
-        'has_key' => $params['has_key'],
         'current_only' => $params['current_only'],
         'membership_types' => $memberListRepo->listMembershipTypes(),
-        'clearFiltersHref' => $clearFiltersHref,
         'exportQuery' => $exportQuery,
         'base' => $urlBase,
     ]);
-    $scripts = View::render('home_tabulator_scripts', [
+    $scripts = View::render('members_tabulator_scripts', [
         'membersJson' => $membersJson,
         'sort_by' => $params['sort_by'],
         'sort_dir' => $params['sort_dir'],
         'base' => $urlBase,
-        'listParamsForExportJson' => $listParamsForExportJson,
+        'membersSortTouchUrl' => $membersSortTouchUrl,
     ]);
     $body = $wrapHtml($inner, 'Members', [
         'authenticated' => true,
@@ -245,6 +250,290 @@ $runMemberExport = static function (string $format) use ($memberListRepo, $sendM
 $app->get('/members/export.csv', $runMemberExport('csv'))->add($authMiddleware);
 $app->get('/members/export.xlsx', $runMemberExport('xlsx'))->add($authMiddleware);
 $app->get('/members/export.pdf', $runMemberExport('pdf'))->add($authMiddleware);
+
+$app->post('/members/session-touch', function (Request $request, Response $response): Response {
+    MemberListExportParams::mergeClientSortIntoSession($request->getParsedBody() ?? []);
+
+    return $response->withStatus(204);
+})->add($authMiddleware);
+
+$sendPaymentsReportExport = static function (Response $response, string $format, string $payload): Response {
+    $stem = PaymentsReportExport::fileStem();
+    [$contentType, $ext] = match ($format) {
+        'csv' => ['text/csv; charset=utf-8', 'csv'],
+        'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'],
+        'pdf' => ['application/pdf', 'pdf'],
+        default => ['application/octet-stream', 'bin'],
+    };
+    $name = "{$stem}.{$ext}";
+    $response->getBody()->write($payload);
+
+    return $response
+        ->withHeader('Content-Type', $contentType)
+        ->withHeader('Content-Disposition', 'attachment; filename="' . str_replace(['"', '\\'], '', $name) . '"');
+};
+
+$runPaymentsReportExport = static function (string $format) use ($paymentsReportRepo, $sendPaymentsReportExport): callable {
+    return function (Request $request, Response $response) use (
+        $paymentsReportRepo,
+        $format,
+        $sendPaymentsReportExport
+    ): Response {
+        $params = PaymentsReportExportParams::resolveForExport($request);
+        $rows = $paymentsReportRepo->listPaymentReportRows($params);
+
+        $binary = match ($format) {
+            'csv' => PaymentsReportExport::toCsvBinary($rows),
+            'xlsx' => PaymentsReportExport::toXlsxBinary($rows),
+            'pdf' => PaymentsReportExport::toPdfBinary($rows),
+            default => '',
+        };
+
+        return $binary !== ''
+            ? $sendPaymentsReportExport($response, $format, $binary)
+            : $response->withStatus(404);
+    };
+};
+
+$sendNamedReportExport = static function (Response $response, string $stem, string $format, string $payload): Response {
+    [$contentType, $ext] = match ($format) {
+        'csv' => ['text/csv; charset=utf-8', 'csv'],
+        'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'],
+        'pdf' => ['application/pdf', 'pdf'],
+        default => ['application/octet-stream', 'bin'],
+    };
+    $name = "{$stem}.{$ext}";
+    $response->getBody()->write($payload);
+
+    return $response
+        ->withHeader('Content-Type', $contentType)
+        ->withHeader('Content-Disposition', 'attachment; filename="' . str_replace(['"', '\\'], '', $name) . '"');
+};
+
+$app->get('/reports', function (Request $request, Response $response) use (
+    $wrapHtml,
+    $htmlResponse,
+    $urlBase
+): Response {
+    $body = $wrapHtml(View::render('reports', ['base' => $urlBase]), 'Reports', [
+        'authenticated' => true,
+        'activeNav' => 'reports',
+        'base' => $urlBase,
+    ]);
+
+    return $htmlResponse($response, $body);
+})->add($authMiddleware);
+
+$app->post('/reports/payments', function (Request $request, Response $response) use ($urlBase): Response {
+    $flat = PaymentsReportExportParams::mergedFlatAfterPaymentReportPost($request->getParsedBody() ?? []);
+    $params = PaymentsReportRepository::parsePaymentReportQuery($flat);
+    PaymentsReportExportParams::persistFromParsed($params);
+    $loc = ($urlBase === '' ? '' : $urlBase) . '/reports/payments';
+
+    return $response->withStatus(303)->withHeader('Location', $loc);
+})->add($authMiddleware);
+
+$app->get('/reports/payments', function (Request $request, Response $response) use (
+    $paymentsReportRepo,
+    $wrapHtml,
+    $htmlResponse,
+    $urlBase
+): Response {
+    unset($request);
+    $params = PaymentsReportRepository::parsePaymentReportQuery(
+        PaymentsReportExportParams::persistedPaymentReportQueryInput()
+    );
+    PaymentsReportExportParams::persistFromParsed($params);
+
+    $total = $paymentsReportRepo->countRows($params);
+    $rows = $paymentsReportRepo->listPaymentReportRows($params);
+    $postAction = ($urlBase === '' ? '' : $urlBase) . '/reports/payments';
+
+    $paymentsReportSortPost = [];
+    foreach (['member_name', 'call_sign', 'payment_date', 'paid_through', 'membership_type', 'form_number'] as $field) {
+        [$nsb, $nsd] = PaymentsReportRepository::nextSortChoice(
+            $params['sort_by'],
+            $params['sort_dir'],
+            $field
+        );
+        $paymentsReportSortPost[$field] = ['sort_by' => $nsb, 'sort_dir' => $nsd];
+    }
+
+    $inner = View::render('reports_payment_report', [
+        'total' => $total,
+        'rows' => $rows,
+        'start_date' => $params['start_date'],
+        'end_date' => $params['end_date'],
+        'paid_through_start' => $params['paid_through_start'],
+        'paid_through_end' => $params['paid_through_end'],
+        'sort_by' => $params['sort_by'],
+        'sort_dir' => $params['sort_dir'],
+        'paymentsReportSortPost' => $paymentsReportSortPost,
+        'paymentsReportPostAction' => $postAction,
+        'exportQuery' => '',
+        'base' => $urlBase,
+    ]);
+
+    $body = $wrapHtml($inner, 'Payment report', [
+        'authenticated' => true,
+        'activeNav' => 'reports',
+        'base' => $urlBase,
+    ]);
+
+    return $htmlResponse($response, $body);
+})->add($authMiddleware);
+
+$app->get('/reports/payments/export.csv', $runPaymentsReportExport('csv'))->add($authMiddleware);
+$app->get('/reports/payments/export.xlsx', $runPaymentsReportExport('xlsx'))->add($authMiddleware);
+$app->get('/reports/payments/export.pdf', $runPaymentsReportExport('pdf'))->add($authMiddleware);
+
+$app->post('/reports/keyholders', function (Request $request, Response $response) use ($urlBase): Response {
+    $flat = KeyholdersReportParams::mergedFlatAfterPost($request->getParsedBody() ?? []);
+    $params = ReportsRepository::parseKeyholdersQuery($flat);
+    KeyholdersReportParams::persistFromParsed($params);
+    $loc = ($urlBase === '' ? '' : $urlBase) . '/reports/keyholders';
+
+    return $response->withStatus(303)->withHeader('Location', $loc);
+})->add($authMiddleware);
+
+$app->get('/reports/keyholders', function (Request $request, Response $response) use (
+    $reportsRepo,
+    $wrapHtml,
+    $htmlResponse,
+    $urlBase
+): Response {
+    unset($request);
+    $khParams = ReportsRepository::parseKeyholdersQuery(KeyholdersReportParams::persistedSortInput());
+    KeyholdersReportParams::persistFromParsed($khParams);
+    $rows = $reportsRepo->listKeyholders($khParams['sort_by'], $khParams['sort_dir']);
+    $postAction = ($urlBase === '' ? '' : $urlBase) . '/reports/keyholders';
+    $keyholdersSortPost = [];
+    foreach (['name', 'call_sign', 'key_number', 'email'] as $field) {
+        [$nsb, $nsd] = ReportsRepository::nextKeyholdersSortChoice(
+            $khParams['sort_by'],
+            $khParams['sort_dir'],
+            $field
+        );
+        $keyholdersSortPost[$field] = ['sort_by' => $nsb, 'sort_dir' => $nsd];
+    }
+
+    $body = $wrapHtml(View::render('reports_keyholders', [
+        'total' => \count($rows),
+        'rows' => $rows,
+        'sort_by' => $khParams['sort_by'],
+        'sort_dir' => $khParams['sort_dir'],
+        'keyholdersSortPost' => $keyholdersSortPost,
+        'keyholdersPostAction' => $postAction,
+        'exportQuery' => '',
+        'base' => $urlBase,
+    ]), 'Keyholders', [
+        'authenticated' => true,
+        'activeNav' => 'reports',
+        'base' => $urlBase,
+    ]);
+
+    return $htmlResponse($response, $body);
+})->add($authMiddleware);
+
+$app->get('/reports/keyholders/export.csv', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('keyholders-report');
+    $kh = KeyholdersReportParams::resolveForExport($request);
+    $rows = $reportsRepo->listKeyholders($kh['sort_by'], $kh['sort_dir']);
+
+    return $sendNamedReportExport($response, $stem, 'csv', StaticRosterExports::keyholdersCsvBinary($rows));
+})->add($authMiddleware);
+
+$app->get('/reports/keyholders/export.xlsx', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('keyholders-report');
+    $kh = KeyholdersReportParams::resolveForExport($request);
+    $rows = $reportsRepo->listKeyholders($kh['sort_by'], $kh['sort_dir']);
+
+    return $sendNamedReportExport($response, $stem, 'xlsx', StaticRosterExports::keyholdersXlsxBinary($rows));
+})->add($authMiddleware);
+
+$app->get('/reports/keyholders/export.pdf', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('keyholders-report');
+    $kh = KeyholdersReportParams::resolveForExport($request);
+    $rows = $reportsRepo->listKeyholders($kh['sort_by'], $kh['sort_dir']);
+
+    return $sendNamedReportExport($response, $stem, 'pdf', StaticRosterExports::keyholdersPdfBinary($rows));
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-name', function (Request $request, Response $response) use (
+    $reportsRepo,
+    $wrapHtml,
+    $htmlResponse,
+    $urlBase
+): Response {
+    $rows = $reportsRepo->rosterByName();
+    $body = $wrapHtml(View::render('reports_roster_name', [
+        'total' => \count($rows),
+        'rows' => $rows,
+        'base' => $urlBase,
+    ]), 'Roster by name', [
+        'authenticated' => true,
+        'activeNav' => 'reports',
+        'base' => $urlBase,
+    ]);
+
+    return $htmlResponse($response, $body);
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-name/export.csv', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('roster-by-name');
+
+    return $sendNamedReportExport($response, $stem, 'csv', StaticRosterExports::rosterByNameCsvBinary($reportsRepo->rosterByName()));
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-name/export.xlsx', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('roster-by-name');
+
+    return $sendNamedReportExport($response, $stem, 'xlsx', StaticRosterExports::rosterByNameXlsxBinary($reportsRepo->rosterByName()));
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-name/export.pdf', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('roster-by-name');
+
+    return $sendNamedReportExport($response, $stem, 'pdf', StaticRosterExports::rosterByNamePdfBinary($reportsRepo->rosterByName()));
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-callsign', function (Request $request, Response $response) use (
+    $reportsRepo,
+    $wrapHtml,
+    $htmlResponse,
+    $urlBase
+): Response {
+    $rows = $reportsRepo->rosterByCallsign();
+    $body = $wrapHtml(View::render('reports_roster_callsign', [
+        'total' => \count($rows),
+        'rows' => $rows,
+        'base' => $urlBase,
+    ]), 'Roster by callsign', [
+        'authenticated' => true,
+        'activeNav' => 'reports',
+        'base' => $urlBase,
+    ]);
+
+    return $htmlResponse($response, $body);
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-callsign/export.csv', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('roster-by-callsign');
+
+    return $sendNamedReportExport($response, $stem, 'csv', StaticRosterExports::rosterByCallsignCsvBinary($reportsRepo->rosterByCallsign()));
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-callsign/export.xlsx', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('roster-by-callsign');
+
+    return $sendNamedReportExport($response, $stem, 'xlsx', StaticRosterExports::rosterByCallsignXlsxBinary($reportsRepo->rosterByCallsign()));
+})->add($authMiddleware);
+
+$app->get('/reports/roster-by-callsign/export.pdf', function (Request $request, Response $response) use ($reportsRepo, $sendNamedReportExport): Response {
+    $stem = StaticRosterExports::filenameStem('roster-by-callsign');
+
+    return $sendNamedReportExport($response, $stem, 'pdf', StaticRosterExports::rosterByCallsignPdfBinary($reportsRepo->rosterByCallsign()));
+})->add($authMiddleware);
 
 $membersRepo = new MemberRepository($pdo);
 $paymentsRepo = new PaymentRepository($pdo);

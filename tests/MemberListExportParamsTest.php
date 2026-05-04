@@ -7,69 +7,61 @@ namespace DvraMembership\Tests;
 use DvraMembership\Repository\MemberListRepository;
 use DvraMembership\Support\MemberListExportParams;
 use PHPUnit\Framework\TestCase;
+use Slim\Psr7\Factory\ServerRequestFactory;
 
 final class MemberListExportParamsTest extends TestCase
 {
+    private const SESSION_KEY = 'dvra_members_last_export_query_input';
+
     protected function setUp(): void
     {
         $_SESSION = [];
     }
 
-    public function testMergedQueryFillsMissingCurrentOnlyFromSession(): void
+    public function testExportUsesPersistedSessionOnly(): void
     {
-        $_SESSION = [];
         MemberListExportParams::persistFromParsed(MemberListRepository::parseListQuery([
             'sort_by' => 'last_name',
             'sort_dir' => 'asc',
             'current_only' => 'no',
             'search' => '',
+            'membership_type_id' => null,
+            'arrl' => '',
         ]));
 
-        $resolved = MemberListExportParams::resolveMergedExportQueryFromFlat(
-            [
-                'sort_by' => 'call_sign',
-                'sort_dir' => 'desc',
-            ],
-            'sort_by=call_sign&sort_dir=desc'
+        $request = (new ServerRequestFactory())->createServerRequest(
+            'GET',
+            'http://localhost/members/export.csv?current_only=yes&sort_by=call_sign&sort_dir=desc'
         );
 
-        $this->assertSame('no', $resolved['current_only']);
-        $this->assertSame('call_sign', $resolved['sort_by']);
-        $this->assertSame('desc', $resolved['sort_dir']);
+        $resolved = MemberListExportParams::resolveForExport($request);
+
+        self::assertSame('no', $resolved['current_only']);
+        self::assertSame('last_name', $resolved['sort_by']);
+        self::assertSame('asc', $resolved['sort_dir']);
     }
 
-    public function testExplicitExportQueryOverridesSessionCurrentScope(): void
+    public function testMergeClientSortIntoSessionUpdatesSort(): void
     {
         MemberListExportParams::persistFromParsed(MemberListRepository::parseListQuery([
-            'current_only' => 'no',
             'sort_by' => 'last_name',
             'sort_dir' => 'asc',
+            'current_only' => 'yes',
+            'search' => 'x',
+            'membership_type_id' => null,
+            'arrl' => '',
         ]));
 
-        $resolved = MemberListExportParams::resolveMergedExportQueryFromFlat(
-            [
-                'sort_by' => 'last_name',
-                'sort_dir' => 'asc',
-                'current_only' => 'yes',
-            ],
-            'current_only=yes&sort_by=last_name&sort_dir=asc'
-        );
+        MemberListExportParams::mergeClientSortIntoSession([
+            'sort_by' => 'call_sign',
+            'sort_dir' => 'desc',
+        ]);
 
-        $this->assertSame('yes', $resolved['current_only']);
-    }
-
-    public function testRawQueryPinsCurrentOnlyWhenMissingFromParsedParams(): void
-    {
-        $_SESSION = [];
-        $resolved = MemberListExportParams::resolveMergedExportQueryFromFlat(
-            [
-                'sort_by' => 'last_name',
-                'sort_dir' => 'asc',
-            ],
-            'sort_by=last_name&sort_dir=asc&current_only=no'
-        );
-
-        $this->assertSame('no', $resolved['current_only']);
+        $snap = $_SESSION[self::SESSION_KEY] ?? [];
+        self::assertSame('call_sign', $snap['sort_by'] ?? null);
+        self::assertSame('desc', $snap['sort_dir'] ?? null);
+        self::assertSame('x', $snap['search'] ?? null);
+        self::assertSame('yes', $snap['current_only'] ?? null);
     }
 
     public function testBuildExportQueryStringAlwaysIncludesCurrentOnly(): void
@@ -82,7 +74,7 @@ final class MemberListExportParamsTest extends TestCase
 
         parse_str(trim($qs, '?'), $out);
 
-        $this->assertSame('yes', $out['current_only'] ?? null);
-        $this->assertSame('last_name', $out['sort_by']);
+        self::assertSame('yes', $out['current_only'] ?? null);
+        self::assertSame('last_name', $out['sort_by']);
     }
 }

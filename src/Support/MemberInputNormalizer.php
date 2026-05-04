@@ -26,6 +26,30 @@ final class MemberInputNormalizer
         return $s !== '' ? $s : null;
     }
 
+    /**
+     * US 10-digit NANP only: strip non-digits, drop a single leading country code 1, format NXX-NXX-XXXX.
+     * Returns null when empty or when digits are not exactly 10 (after optional leading 1).
+     */
+    public static function normalizePhoneUsTenDigit(?string $raw): ?string
+    {
+        $s = $raw !== null ? trim($raw) : '';
+        if ($s === '') {
+            return null;
+        }
+        $digits = preg_replace('/\D+/', '', $s);
+        if ($digits === null || $digits === '') {
+            return null;
+        }
+        if (\strlen($digits) === 11 && $digits[0] === '1') {
+            $digits = substr($digits, 1);
+        }
+        if (\strlen($digits) !== 10) {
+            return null;
+        }
+
+        return substr($digits, 0, 3) . '-' . substr($digits, 3, 3) . '-' . substr($digits, 6, 4);
+    }
+
     /** Two-letter USPS-style → uppercase; else cap at 16 chars. */
     public static function normalizeState(?string $raw): ?string
     {
@@ -74,7 +98,7 @@ final class MemberInputNormalizer
         }
     }
 
-    /** @return array{last_name: string, first_name: string, call_sign: ?string, email: ?string, phone: ?string, address_street: ?string, address_city: ?string, address_state: ?string, address_zip: ?string, license_class_id: ?int, membership_type_id: ?int, arrl_member: bool, key_number: ?int, paid_through: ?string} paid_through normalized when caller passed parseOptionalPaidThrough */
+    /** @return array{last_name: string, first_name: string, call_sign: ?string, email: ?string, phone: ?string, address_street: ?string, address_city: ?string, address_state: ?string, address_zip: ?string, license_class_id: ?int, membership_type_id: ?int, arrl_member: bool, key_number: ?int, paid_through: ?string} phone: US NXX-NXX-XXXX or null; paid_through when caller passed parseOptionalPaidThrough */
     public static function memberCreateFromForm(array $body, ?string $paidThroughIsoOrNull): array
     {
         $keyRaw = isset($body['key_number']) ? trim((string) $body['key_number']) : '';
@@ -86,7 +110,7 @@ final class MemberInputNormalizer
             'first_name' => isset($body['first_name']) ? trim((string) $body['first_name']) : '',
             'call_sign' => self::normalizeCallSign(isset($body['call_sign']) ? (string) $body['call_sign'] : null),
             'email' => self::stripOptional(isset($body['email']) ? (string) $body['email'] : null),
-            'phone' => self::stripOptional(isset($body['phone']) ? (string) $body['phone'] : null),
+            'phone' => self::normalizePhoneUsTenDigit(isset($body['phone']) ? (string) $body['phone'] : null),
             'address_street' => self::stripOptional(isset($body['address_street']) ? (string) $body['address_street'] : null),
             'address_city' => self::stripOptional(isset($body['address_city']) ? (string) $body['address_city'] : null),
             'address_state' => self::normalizeState(isset($body['address_state']) ? (string) $body['address_state'] : null),

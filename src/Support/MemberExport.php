@@ -16,7 +16,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  */
 final class MemberExport
 {
-    /** @var list<string> Column order matches members grid (excluding Actions); keys in row arrays */
+    /** @var list<string> Row keys (snake_case); same order as member grid minus Actions */
     private const EXPORT_FIELD_KEYS = [
         'call_sign',
         'last_name',
@@ -34,8 +34,8 @@ final class MemberExport
         'paid_through',
     ];
 
-    /** @var list<string> Header labels aligned with EXPORT_FIELD_KEYS */
-    private const HEADERS = [
+    /** @var list<string> First-row labels only (pretty); aligns with EXPORT_FIELD_KEYS */
+    private const DISPLAY_HEADERS = [
         'Call sign',
         'Last name',
         'First name',
@@ -89,7 +89,7 @@ final class MemberExport
             $w[] = 266 / $colCount;
         }
 
-        foreach (self::HEADERS as $i => $h) {
+        foreach (self::DISPLAY_HEADERS as $i => $h) {
             $pdf->Cell($w[$i], 6, self::latin1Approx($h), 1);
         }
         $pdf->Ln();
@@ -117,7 +117,7 @@ final class MemberExport
     {
         $ss = new Spreadsheet();
         $sheet = $ss->getActiveSheet();
-        foreach (self::HEADERS as $c => $header) {
+        foreach (self::DISPLAY_HEADERS as $c => $header) {
             $coord = Coordinate::stringFromColumnIndex($c + 1) . '1';
             $sheet->setCellValue($coord, $header);
         }
