@@ -6,4 +6,4 @@
 /python-import/.venv/
 __pycache__/
 *.py[cod]
-.phpunit.cache/
+.phpunit.cache/*
