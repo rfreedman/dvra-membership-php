@@ -259,6 +259,34 @@ h2 {
   overflow: visible;
 }
 
+/* Payment report only: initial autofit (JS sets col widths), then fixed layout + drag handles */
+.data-table-scroll .data-table.payments-report-table:not(.payments-report-table--columns-sized) {
+  width: max-content;
+  max-width: none;
+  table-layout: auto;
+}
+
+.data-table-scroll .data-table.payments-report-table.payments-report-table--columns-sized {
+  table-layout: fixed;
+  width: auto;
+}
+
+.data-table-scroll .data-table.payments-report-table thead th .col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  margin-right: -2px;
+  cursor: col-resize;
+  z-index: 4;
+  background: transparent;
+}
+
+.data-table-scroll .data-table.payments-report-table thead th .col-resize-handle:hover {
+  background: rgba(192, 86, 33, 0.18);
+}
+
 .data-table-scroll thead th {
   position: sticky;
   top: 0;
