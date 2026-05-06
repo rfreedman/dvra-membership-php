@@ -952,19 +952,24 @@ input.no-spinner[type="number"] {
   font-weight: 500;
 }
 
-/* Member edit: conventional vertical form + scroll pane */
-.member-detail-page {
+/* Member edit / create: conventional vertical form + scroll pane */
+.member-detail-page,
+.member-new-page {
   --member-form-border: #94a3b8;
   padding-bottom: 1.5rem;
 }
 
 .member-detail-page input,
 .member-detail-page select,
-.member-detail-page textarea {
+.member-detail-page textarea,
+.member-new-page input,
+.member-new-page select,
+.member-new-page textarea {
   border-color: var(--member-form-border);
 }
 
-.member-detail-page .member-edit-form {
+.member-detail-page .member-edit-form,
+.member-new-page .member-edit-form {
   max-width: min(34rem, 100%);
   display: flex;
   flex-direction: column;
@@ -972,7 +977,8 @@ input.no-spinner[type="number"] {
   margin: 0 0 1.25rem 0;
 }
 
-.member-detail-page fieldset.member-form-fieldset.member-address-fields {
+.member-detail-page fieldset.member-form-fieldset.member-address-fields,
+.member-new-page fieldset.member-form-fieldset.member-address-fields {
   border: 1px solid var(--member-form-border);
   border-radius: 4px;
   padding: 0.85rem 1rem 1rem;
@@ -983,14 +989,16 @@ input.no-spinner[type="number"] {
   background: rgba(255, 255, 255, 0.4);
 }
 
-.member-detail-page fieldset.member-address-fields legend {
+.member-detail-page fieldset.member-address-fields legend,
+.member-new-page fieldset.member-address-fields legend {
   padding: 0 0.35rem;
   font-size: 0.92rem;
   font-weight: 700;
   color: var(--color-header-bottom);
 }
 
-.member-detail-page .member-form-field {
+.member-detail-page .member-form-field,
+.member-new-page .member-form-field {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
@@ -999,13 +1007,35 @@ input.no-spinner[type="number"] {
 }
 
 .member-detail-page .member-form-field label,
-.member-detail-page .member-form-field .member-form-field-label {
+.member-detail-page .member-form-field .member-form-field-label,
+.member-new-page .member-form-field label,
+.member-new-page .member-form-field .member-form-field-label {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
-/* Address: label + control on one row */
+/* Create member: address stacks vertically (same as other fields) */
+.member-new-page fieldset.member-address-fields .member-form-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  padding-block: 0.5rem;
+}
+
+.member-new-page fieldset.member-address-fields .member-form-field label {
+  flex: unset;
+  width: auto;
+  margin: 0;
+}
+
+.member-new-page fieldset.member-address-fields .member-form-control {
+  flex: unset;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Member edit: address label + control on one row */
 .member-detail-page fieldset.member-address-fields .member-form-field {
   flex-direction: row;
   flex-wrap: wrap;
@@ -1029,7 +1059,8 @@ input.no-spinner[type="number"] {
   display: block;
 }
 
-.member-detail-page .member-form-control {
+.member-detail-page .member-form-control,
+.member-new-page .member-form-control {
   width: 100%;
   max-width: 100%;
 }
@@ -1057,13 +1088,19 @@ input.no-spinner[type="number"] {
   font-weight: 500;
 }
 
-.member-detail-page .member-form-actions-row {
+.member-detail-page .member-form-actions-row,
+.member-new-page .member-form-actions-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
   max-width: min(34rem, 100%);
   margin-top: 0.35rem;
+}
+
+.member-new-page .member-edit-form .member-form-actions-row {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
 }
 
 .member-detail-page .member-delete-form-inline {
@@ -1073,7 +1110,8 @@ input.no-spinner[type="number"] {
   display: inline-flex;
 }
 
-.member-detail-page .member-form-submit {
+.member-detail-page .member-form-submit,
+.member-new-page .member-form-submit {
   font-family: var(--font-ui);
   font-size: 0.9rem;
   cursor: pointer;
@@ -1084,17 +1122,20 @@ input.no-spinner[type="number"] {
   padding: 0.45rem 0.9rem;
 }
 
-.member-detail-page .member-form-submit:hover {
+.member-detail-page .member-form-submit:hover,
+.member-new-page .member-form-submit:hover {
   background: var(--color-header-bottom);
 }
 
-.member-detail-page .member-form-submit:disabled {
+.member-detail-page .member-form-submit:disabled,
+.member-new-page .member-form-submit:disabled {
   opacity: 0.55;
   cursor: not-allowed;
   background: var(--color-muted);
 }
 
-.member-detail-page .member-form-submit:disabled:hover {
+.member-detail-page .member-form-submit:disabled:hover,
+.member-new-page .member-form-submit:disabled:hover {
   background: var(--color-muted);
 }
 
