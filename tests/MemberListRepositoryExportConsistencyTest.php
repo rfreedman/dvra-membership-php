@@ -26,8 +26,8 @@ final class MemberListRepositoryExportConsistencyTest extends TestCase
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         Schema::ensure($this->pdo);
 
-        $this->pdo->exec("INSERT INTO license_classes (name, label) VALUES ('EXTRA', '')");
-        $this->pdo->exec("INSERT INTO membership_types (name, label) VALUES ('Annual', '')");
+        $this->pdo->exec("INSERT INTO license_classes (name) VALUES ('EXTRA')");
+        $this->pdo->exec("INSERT INTO membership_types (name) VALUES ('Annual')");
         /** @var int|false $lid */
         $lid = $this->pdo->query('SELECT id FROM license_classes LIMIT 1')->fetchColumn();
         /** @var int|false $tid */

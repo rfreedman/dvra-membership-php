@@ -2,15 +2,14 @@
 $h = static fn (?string $s): string => \DvraMembership\Support\View::e($s);
 /** @var array<string, mixed> $member */
 /** @var list<array{id: int, payment_date: string, paid_through: string, membership_type_id: ?int, form_number: ?string, notes: ?string}> $payments */
-/** @var list<array{id: int, name: ?string, label: ?string}> $membership_types */
+/** @var list<array{id: int, name: ?string}> $membership_types */
 /** @var string|null $flash_error */
 $base = $base ?? '';
 $flash_error = $flash_error ?? null;
 $mid = (int) $member['id'];
 
 $lab = static fn (array $item): string => \DvraMembership\Support\MemberInputNormalizer::referenceLabel(
-    isset($item['name']) ? (string) $item['name'] : '',
-    isset($item['label']) ? (string) $item['label'] : ''
+    isset($item['name']) ? (string) $item['name'] : null
 );
 
 $nameSuffix = '';

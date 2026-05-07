@@ -1161,6 +1161,80 @@ input.no-spinner[type="number"] {
   border-bottom: 1px dashed var(--color-border);
 }
 
+/* Admin page: extra space between sections (license, membership, admins, managers) */
+.admin-reference-page .reference-block {
+  margin-bottom: 2.25rem;
+  padding-bottom: 1rem;
+}
+
+.admin-reference-page .reference-block:last-child {
+  margin-bottom: 0;
+}
+
+/* Admin reference tables (license classes, membership types) */
+.admin-reference-page .admin-ref-section .admin-ref-table-wrap.data-table-scroll {
+  max-height: none;
+  height: auto;
+  margin-bottom: 0;
+}
+
+.admin-reference-page .admin-ref-row-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  margin: 0;
+}
+
+.admin-reference-page .admin-ref-item-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.admin-reference-page .admin-ref-item-row > .admin-ref-row-form:first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.admin-reference-page .admin-ref-item-row > .admin-ref-delete-form {
+  flex: 0 0 auto;
+}
+
+.admin-reference-page .admin-ref-row-form.admin-ref-delete-form {
+  justify-content: flex-start;
+}
+
+.admin-reference-page .admin-ref-name-input {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 28rem;
+}
+
+.admin-reference-page .admin-ref-add-row td {
+  background: rgba(248, 250, 252, 0.85);
+}
+
+.admin-reference-page .admin-ref-add-form {
+  padding: 0.15rem 0;
+}
+
+.admin-reference-page .admin-ref-row-form button {
+  font-family: var(--font-ui);
+  cursor: pointer;
+  background: var(--color-header-top);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+.admin-reference-page .admin-ref-row-form button:hover {
+  background: var(--color-header-bottom);
+}
+
 .payment-card {
   background: var(--color-panel);
   border: 1px solid var(--color-border);

@@ -24,6 +24,47 @@ final class Schema
                 $pdo->exec($stmt);
             }
         }
+
+        self::migrateDropLicenseAndMembershipLabels($pdo);
+    }
+
+    /**
+     * Older DB files may still have `label` on reference tables (removed from schema).
+     * Requires SQLite 3.35+ ALTER TABLE DROP COLUMN.
+     */
+    private static function migrateDropLicenseAndMembershipLabels(PDO $pdo): void
+    {
+        $targets = ['license_classes', 'membership_types'];
+
+        foreach ($targets as $table) {
+            if (!self::sqliteTableHasColumn($pdo, $table, 'label')) {
+                continue;
+            }
+
+            // Whitelist identifiers only — table names above are fixed.
+            $pdo->exec('ALTER TABLE ' . $table . ' DROP COLUMN label');
+        }
+    }
+
+    private static function sqliteTableHasColumn(PDO $pdo, string $table, string $column): bool
+    {
+        $tables = ['license_classes' => true, 'membership_types' => true];
+        if (!isset($tables[$table])) {
+            return false;
+        }
+
+        $stmt = $pdo->query('PRAGMA table_info(' . $table . ')');
+        if (!$stmt) {
+            return false;
+        }
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (($row['name'] ?? '') === $column) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return list<string> */

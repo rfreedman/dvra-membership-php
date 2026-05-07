@@ -156,8 +156,7 @@ final class PaymentsReportRepository
                    m.first_name AS first_name,
                    m.call_sign AS call_sign,
                    mt.id AS mt_id,
-                   mt.name AS mt_name,
-                   mt.label AS mt_label
+                   mt.name AS mt_name
             FROM payments p
             INNER JOIN members m ON m.id = p.member_id
             LEFT JOIN membership_types mt ON mt.id = COALESCE(p.membership_type_id, m.membership_type_id)
@@ -174,8 +173,7 @@ final class PaymentsReportRepository
     }
 
     /**
-     * Prefer reference label column; fallback to internal name unless name is a bogus duplicate of the type row id
-     * (some imports store the numeric id in `name` and the human text only in `label`).
+     * Map joined payment-report row for UI and exports (membership type from `membership_types.name` only).
      *
      * @param array<string, mixed> $r Joined fetch row
      */
@@ -185,7 +183,6 @@ final class PaymentsReportRepository
         $fn = isset($r['first_name']) ? (string) $r['first_name'] : '';
         $memberName = $ln !== '' || $fn !== '' ? "{$ln}, {$fn}" : '';
         $nm = isset($r['mt_name']) && $r['mt_name'] !== null ? (string) $r['mt_name'] : '';
-        $lb = isset($r['mt_label']) && $r['mt_label'] !== null ? (string) $r['mt_label'] : '';
         $mtId = isset($r['mt_id']) && $r['mt_id'] !== null && $r['mt_id'] !== ''
             ? (int) $r['mt_id']
             : null;
@@ -198,29 +195,10 @@ final class PaymentsReportRepository
             'call_sign' => $call !== '' ? strtoupper(trim($call)) : '',
             'payment_date' => isset($r['payment_date']) ? (string) $r['payment_date'] : '',
             'paid_through' => isset($r['paid_through']) ? (string) $r['paid_through'] : '',
-            'membership_type' => self::membershipTypeDisplayLabel($mtId, $nm, $lb),
+            'membership_type' => MemberInputNormalizer::membershipTypeDisplay($mtId, $nm),
             'form_number' => isset($r['form_number']) && $r['form_number'] !== null ? (string) $r['form_number'] : '',
             'notes' => isset($r['notes']) && $r['notes'] !== null ? (string) $r['notes'] : '',
         ];
-    }
-
-    /** Human-facing membership type for payment report (HTML + exports). */
-    private static function membershipTypeDisplayLabel(?int $resolvedTypeRowId, string $name, string $label): string
-    {
-        $base = MemberInputNormalizer::referenceLabel($name !== '' ? $name : null, $label !== '' ? $label : null);
-        if ($base === '' || $resolvedTypeRowId === null || $resolvedTypeRowId < 1) {
-            return $base;
-        }
-        $trimLabel = trim($label);
-        $trimName = trim($name);
-        if ($trimLabel !== '') {
-            return $base;
-        }
-        if ($trimName !== '' && ctype_digit($trimName) && (int) $trimName === $resolvedTypeRowId) {
-            return '';
-        }
-
-        return $base;
     }
 
     /**

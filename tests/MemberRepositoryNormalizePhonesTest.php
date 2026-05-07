@@ -16,7 +16,7 @@ final class MemberRepositoryNormalizePhonesTest extends TestCase
         $pdo = new PDO('sqlite::memory:');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         Schema::ensure($pdo);
-        $pdo->exec("INSERT INTO membership_types (name, label) VALUES ('Annual', '')");
+        $pdo->exec("INSERT INTO membership_types (name) VALUES ('Annual')");
         $mtId = (int) $pdo->query('SELECT id FROM membership_types LIMIT 1')->fetchColumn();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $ins = $pdo->prepare(

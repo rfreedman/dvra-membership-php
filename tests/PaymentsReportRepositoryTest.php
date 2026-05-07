@@ -20,8 +20,8 @@ final class PaymentsReportRepositoryTest extends TestCase
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         Schema::ensure($this->pdo);
 
-        $this->pdo->exec("INSERT INTO license_classes (name, label) VALUES ('EXTRA', '')");
-        $this->pdo->exec("INSERT INTO membership_types (name, label) VALUES ('Annual', '')");
+        $this->pdo->exec("INSERT INTO license_classes (name) VALUES ('EXTRA')");
+        $this->pdo->exec("INSERT INTO membership_types (name) VALUES ('Annual')");
         $mtId = (int) $this->pdo->query('SELECT id FROM membership_types')->fetchColumn();
         $lcId = (int) $this->pdo->query('SELECT id FROM license_classes')->fetchColumn();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -108,10 +108,10 @@ final class PaymentsReportRepositoryTest extends TestCase
         self::assertSame('desc', $p['sort_dir']);
     }
 
-    public function testMembershipTypeExportUsesLabelWhenNameMirrorsNumericId(): void
+    public function testMembershipTypeExportUsesStoredName(): void
     {
         $this->pdo->exec(
-            "INSERT INTO membership_types (id, name, label) VALUES (42, '42', 'Supporter level')"
+            "INSERT INTO membership_types (id, name) VALUES (42, 'Supporter level')"
         );
         $mId = (int) $this->pdo->query('SELECT id FROM members ORDER BY id ASC LIMIT 1')->fetchColumn();
         $this->pdo->prepare(
@@ -134,9 +134,9 @@ final class PaymentsReportRepositoryTest extends TestCase
         self::assertStringContainsString('Supporter level', $csv);
     }
 
-    public function testMembershipTypeBlankWhenLabelEmptyAndNameEqualsTypeId(): void
+    public function testMembershipTypeBlankWhenNameEqualsTypeId(): void
     {
-        $this->pdo->exec("INSERT INTO membership_types (id, name, label) VALUES (99, '99', '')");
+        $this->pdo->exec("INSERT INTO membership_types (id, name) VALUES (99, '99')");
         $mId = (int) $this->pdo->query('SELECT id FROM members ORDER BY id ASC LIMIT 1')->fetchColumn();
         $this->pdo->prepare(
             'INSERT INTO payments (member_id, payment_date, paid_through, membership_type_id, notes, created_at)

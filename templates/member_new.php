@@ -1,14 +1,13 @@
 <?php
 $h = static fn (?string $s): string => \DvraMembership\Support\View::e($s);
 /** @var string|null $error */
-/** @var list<array{id: int, name: ?string, label: ?string}> $license_classes */
-/** @var list<array{id: int, name: ?string, label: ?string}> $membership_types */
+/** @var list<array{id: int, name: ?string}> $license_classes */
+/** @var list<array{id: int, name: ?string}> $membership_types */
 $base = $base ?? '';
 $error = $error ?? null;
 
 $lab = static fn (array $item): string => \DvraMembership\Support\MemberInputNormalizer::referenceLabel(
-    isset($item['name']) ? (string) $item['name'] : '',
-    isset($item['label']) ? (string) $item['label'] : ''
+    isset($item['name']) ? (string) $item['name'] : null
 );
 ?>
 <div class="standard-page-scroll member-new-page">

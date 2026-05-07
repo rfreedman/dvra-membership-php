@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use DvraMembership\Repository\AdminAccountRepository;
 use DvraMembership\Repository\DuplicateMemberKeyNumber;
 use DvraMembership\Repository\MemberListRepository;
 use DvraMembership\Repository\MemberRepository;
 use DvraMembership\Repository\PaymentRepository;
+use DvraMembership\Repository\ReferenceDataRepository;
 use DvraMembership\Repository\PaymentsReportRepository;
 use DvraMembership\Repository\ReportsRepository;
 use DvraMembership\Support\AdminSeed;
@@ -58,6 +60,8 @@ AdminSeed::ensureBootstrapAdmin($pdo, $settings);
 $memberListRepo = new MemberListRepository($pdo);
 $paymentsReportRepo = new PaymentsReportRepository($pdo);
 $reportsRepo = new ReportsRepository($pdo);
+$referenceDataRepo = new ReferenceDataRepository($pdo);
+$adminAccountRepo = new AdminAccountRepository($pdo);
 
 $app = AppFactory::create();
 if ($basePath !== '') {
@@ -90,6 +94,27 @@ $authMiddleware = static function (Request $request, RequestHandler $handler) us
     }
 
     return $handler->handle($request);
+};
+
+$adminPostRedirectResponse = static function (Response $response, ?string $errorMsg = null) use ($urlBase): Response {
+    $loc = ($urlBase === '' ? '' : $urlBase) . '/admin';
+    if ($errorMsg !== null && $errorMsg !== '') {
+        $loc .= '?error=' . rawurlencode($errorMsg);
+    }
+
+    return $response->withStatus(303)->withHeader('Location', $loc);
+};
+
+$referenceWriteErrorFromPdo = static function (\PDOException $e): ?string {
+    $msg = $e->getMessage();
+    if (str_contains($msg, 'UNIQUE constraint')) {
+        return 'That name already exists.';
+    }
+    if (str_contains($msg, 'FOREIGN KEY constraint')) {
+        return 'Cannot delete item while records still reference it.';
+    }
+
+    return null;
 };
 
 $app->get('/health', function (Request $request, Response $response): Response {
@@ -207,6 +232,327 @@ $app->get('/', function (Request $request, Response $response) use ($memberListR
     ]);
 
     return $htmlResponse($response, $body);
+})->add($authMiddleware);
+
+$app->get('/admin', function (Request $request, Response $response) use (
+    $referenceDataRepo,
+    $adminAccountRepo,
+    $wrapHtml,
+    $htmlResponse,
+    $urlBase
+): Response {
+    $qp = $request->getQueryParams();
+    $error = isset($qp['error']) ? trim((string) $qp['error']) : '';
+    $errorOut = $error !== '' ? $error : null;
+
+    $inner = View::render('admin', [
+        'base' => $urlBase,
+        'error' => $errorOut,
+        'license_classes' => $referenceDataRepo->listLicenseClasses(),
+        'membership_types' => $referenceDataRepo->listMembershipTypes(),
+        'admin_users' => $adminAccountRepo->listAdminUsers(),
+        'managers' => $adminAccountRepo->listManagers(),
+    ]);
+
+    return $htmlResponse($response, $wrapHtml($inner, 'Admin', [
+        'authenticated' => true,
+        'activeNav' => 'admin',
+        'base' => $urlBase,
+    ]));
+})->add($authMiddleware);
+
+$app->post('/admin/license/create', function (Request $request, Response $response) use (
+    $referenceDataRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $name = isset($data['name']) ? trim((string) $data['name']) : '';
+    if ($name === '') {
+        return $adminPostRedirectResponse($response, 'Name is required.');
+    }
+    try {
+        $referenceDataRepo->createLicenseClass($name);
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admin/license/{license_id}/update', function (Request $request, Response $response, array $args) use (
+    $referenceDataRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    $id = (int) ($args['license_id'] ?? 0);
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $name = isset($data['name']) ? trim((string) $data['name']) : '';
+    if ($id <= 0 || $name === '') {
+        return $adminPostRedirectResponse($response, 'Invalid license class.');
+    }
+    try {
+        $referenceDataRepo->updateLicenseClass($id, $name);
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admin/license/{license_id}/delete', function (Request $request, Response $response, array $args) use (
+    $referenceDataRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    unset($request);
+    $id = (int) ($args['license_id'] ?? 0);
+    if ($id <= 0) {
+        return $adminPostRedirectResponse($response, 'Invalid license class.');
+    }
+    try {
+        $referenceDataRepo->deleteLicenseClass($id);
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admin/membership-type/create', function (Request $request, Response $response) use (
+    $referenceDataRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $name = isset($data['name']) ? trim((string) $data['name']) : '';
+    if ($name === '') {
+        return $adminPostRedirectResponse($response, 'Name is required.');
+    }
+    try {
+        $referenceDataRepo->createMembershipType($name);
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admin/membership-type/{type_id}/update', function (Request $request, Response $response, array $args) use (
+    $referenceDataRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    $id = (int) ($args['type_id'] ?? 0);
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $name = isset($data['name']) ? trim((string) $data['name']) : '';
+    if ($id <= 0 || $name === '') {
+        return $adminPostRedirectResponse($response, 'Invalid membership type.');
+    }
+    try {
+        $referenceDataRepo->updateMembershipType($id, $name);
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admin/membership-type/{type_id}/delete', function (Request $request, Response $response, array $args) use (
+    $referenceDataRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    unset($request);
+    $id = (int) ($args['type_id'] ?? 0);
+    if ($id <= 0) {
+        return $adminPostRedirectResponse($response, 'Invalid membership type.');
+    }
+    try {
+        $referenceDataRepo->deleteMembershipTypeOrFail($id);
+    } catch (\RuntimeException $e) {
+        return $adminPostRedirectResponse($response, $e->getMessage());
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admins/create', function (Request $request, Response $response) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $username = isset($data['username']) ? trim((string) $data['username']) : '';
+    $password = isset($data['password']) ? (string) $data['password'] : '';
+    if ($username === '' || trim($password) === '') {
+        return $adminPostRedirectResponse($response, 'Username and password are required.');
+    }
+    try {
+        $adminAccountRepo->createAdminUser($username, $password);
+    } catch (\PDOException $e) {
+        if (str_contains($e->getMessage(), 'admin_users')) {
+            return $adminPostRedirectResponse($response, 'That administrator username already exists.');
+        }
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admins/{admin_id}/password', function (Request $request, Response $response, array $args) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse
+): Response {
+    $id = (int) ($args['admin_id'] ?? 0);
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $password = isset($data['password']) ? (string) $data['password'] : '';
+    if ($id <= 0 || trim($password) === '') {
+        return $adminPostRedirectResponse($response, 'Invalid administrator or password.');
+    }
+    $adminAccountRepo->updateAdminPassword($id, $password);
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/admins/{admin_id}/delete', function (Request $request, Response $response, array $args) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse
+): Response {
+    unset($request);
+    $id = (int) ($args['admin_id'] ?? 0);
+    if ($id <= 0) {
+        return $adminPostRedirectResponse($response, 'Invalid administrator.');
+    }
+    try {
+        $adminAccountRepo->deleteAdminUserOrFail($id);
+    } catch (\RuntimeException $e) {
+        return $adminPostRedirectResponse($response, $e->getMessage());
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/managers/create', function (Request $request, Response $response) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $username = isset($data['username']) ? trim((string) $data['username']) : '';
+    $password = isset($data['password']) ? (string) $data['password'] : '';
+    $displayRaw = isset($data['display_name']) ? trim((string) $data['display_name']) : '';
+    $displayName = $displayRaw !== '' ? $displayRaw : null;
+    if ($username === '' || trim($password) === '') {
+        return $adminPostRedirectResponse($response, 'Username and password are required.');
+    }
+    try {
+        $adminAccountRepo->createManager($username, $password, $displayName);
+    } catch (\PDOException $e) {
+        if (str_contains($e->getMessage(), 'managers')) {
+            return $adminPostRedirectResponse($response, 'That manager username already exists.');
+        }
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/managers/{manager_id}/password', function (Request $request, Response $response, array $args) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse
+): Response {
+    $id = (int) ($args['manager_id'] ?? 0);
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $password = isset($data['password']) ? (string) $data['password'] : '';
+    if ($id <= 0 || trim($password) === '') {
+        return $adminPostRedirectResponse($response, 'Invalid manager or password.');
+    }
+    $adminAccountRepo->updateManagerPassword($id, $password);
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/managers/{manager_id}/profile', function (Request $request, Response $response, array $args) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse
+): Response {
+    $id = (int) ($args['manager_id'] ?? 0);
+    /** @var array<string, mixed> $data */
+    $data = $request->getParsedBody() ?? [];
+    $displayRaw = isset($data['display_name']) ? trim((string) $data['display_name']) : '';
+    $displayName = $displayRaw !== '' ? $displayRaw : null;
+    if ($id <= 0) {
+        return $adminPostRedirectResponse($response, 'Invalid manager.');
+    }
+    $adminAccountRepo->updateManagerProfile($id, $displayName);
+
+    return $adminPostRedirectResponse($response);
+})->add($authMiddleware);
+
+$app->post('/managers/{manager_id}/delete', function (Request $request, Response $response, array $args) use (
+    $adminAccountRepo,
+    $adminPostRedirectResponse,
+    $referenceWriteErrorFromPdo
+): Response {
+    unset($request);
+    $id = (int) ($args['manager_id'] ?? 0);
+    if ($id <= 0) {
+        return $adminPostRedirectResponse($response, 'Invalid manager.');
+    }
+    try {
+        $adminAccountRepo->deleteManager($id);
+    } catch (\PDOException $e) {
+        $msg = $referenceWriteErrorFromPdo($e);
+        if ($msg !== null) {
+            return $adminPostRedirectResponse($response, $msg);
+        }
+        throw $e;
+    }
+
+    return $adminPostRedirectResponse($response);
 })->add($authMiddleware);
 
 $sendMemberExport = static function (Response $response, string $format, string $payload): Response {

@@ -175,13 +175,30 @@ final class MemberInputNormalizer
         ];
     }
 
-    public static function referenceLabel(?string $name, ?string $label): string
+    /** Human-visible name for a license class or membership type row (DB `name` only). */
+    public static function referenceLabel(?string $name): string
     {
-        $lab = trim((string) ($label ?? ''));
-        if ($lab !== '') {
-            return $lab;
+        return trim((string) ($name ?? ''));
+    }
+
+    /**
+     * Payments / grids: human `name`, or hide when bogus imports encoded only the numeric row id as `name`.
+     */
+    public static function membershipTypeDisplay(?int $resolvedTypeRowId, string $name): string
+    {
+        $trimName = trim($name);
+        if ($trimName === '') {
+            return '';
+        }
+        if (
+            $resolvedTypeRowId !== null
+            && $resolvedTypeRowId >= 1
+            && ctype_digit($trimName)
+            && (int) $trimName === $resolvedTypeRowId
+        ) {
+            return '';
         }
 
-        return trim((string) ($name ?? ''));
+        return $trimName;
     }
 }

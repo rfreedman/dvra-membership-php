@@ -20,8 +20,8 @@ final class ReportsRepositoryTest extends TestCase
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         Schema::ensure($this->pdo);
 
-        $this->pdo->exec("INSERT INTO license_classes (name, label) VALUES ('EXTRA', '')");
-        $this->pdo->exec("INSERT INTO membership_types (name, label) VALUES ('Annual', '')");
+        $this->pdo->exec("INSERT INTO license_classes (name) VALUES ('EXTRA')");
+        $this->pdo->exec("INSERT INTO membership_types (name) VALUES ('Annual')");
         $mtId = (int) $this->pdo->query('SELECT id FROM membership_types')->fetchColumn();
         $lcId = (int) $this->pdo->query('SELECT id FROM license_classes')->fetchColumn();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');

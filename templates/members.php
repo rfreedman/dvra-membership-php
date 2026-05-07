@@ -7,7 +7,7 @@ $h = static fn (?string $s): string => \DvraMembership\Support\View::e($s);
 /** @var string $arrl */
 /** @var string $current_only */
 /** @var int|null $membership_type_id */
-/** @var list<array{id: int, name: ?string, label: ?string}> $membership_types */
+/** @var list<array{id: int, name: ?string}> $membership_types */
 /** @var string $exportQuery */
 $base = $base ?? '';
 
@@ -59,10 +59,7 @@ $membershipBlankSel = static function (?int $sel): string {
           <select name="membership_type_id">
             <option value=""<?= $membershipBlankSel($membership_type_id) ?>>Any</option>
             <?php foreach ($membership_types as $item): ?>
-            <option value="<?= $h((string) $item['id']) ?>"<?= $membershipSel($item['id'], $membership_type_id) ?>><?php
-                $lab = trim((string) ($item['label'] ?? ''));
-                echo $h($lab !== '' ? $lab : (string) ($item['name'] ?? ''));
-            ?></option>
+            <option value="<?= $h((string) $item['id']) ?>"<?= $membershipSel($item['id'], $membership_type_id) ?>><?= $h(trim((string) ($item['name'] ?? ''))) ?></option>
             <?php endforeach; ?>
           </select>
         </label>

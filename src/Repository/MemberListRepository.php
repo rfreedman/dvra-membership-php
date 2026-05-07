@@ -80,24 +80,23 @@ final class MemberListRepository
     }
 
     /**
-     * @return array{name: ?string, label: ?string, id: int}[]
+     * @return array{name: ?string, id: int}[]
      */
     public function listMembershipTypes(): array
     {
         $stmt = $this->pdo->query(
-            'SELECT id, name, label FROM membership_types ORDER BY name ASC'
+            'SELECT id, name FROM membership_types ORDER BY name ASC'
         );
         if (!$stmt) {
             return [];
         }
-        /** @var list<array{id: string|int, name: mixed, label: mixed}> $rows */
+        /** @var list<array{id: string|int, name: mixed}> $rows */
         $rows = $stmt->fetchAll();
         $out = [];
         foreach ($rows as $r) {
             $out[] = [
                 'id' => (int) $r['id'],
                 'name' => isset($r['name']) ? (string) $r['name'] : null,
-                'label' => isset($r['label']) && $r['label'] !== null ? (string) $r['label'] : null,
             ];
         }
 
@@ -176,8 +175,8 @@ final class MemberListRepository
                    m.arrl_member AS arrl_member,
                    m.key_number AS key_number,
                    m.paid_through AS paid_through,
-                   lc.name AS lc_name, lc.label AS lc_label,
-                   mt.name AS mt_name, mt.label AS mt_label
+                   lc.name AS lc_name,
+                   mt.name AS mt_name
             FROM members m
             LEFT JOIN license_classes lc ON m.license_class_id = lc.id
             LEFT JOIN membership_types mt ON m.membership_type_id = mt.id
@@ -201,9 +200,7 @@ final class MemberListRepository
     {
         $id = (int) $r['id'];
         $lcName = isset($r['lc_name']) ? (string) $r['lc_name'] : '';
-        $lcLabel = isset($r['lc_label']) && $r['lc_label'] !== null ? (string) $r['lc_label'] : '';
         $mtName = isset($r['mt_name']) ? (string) $r['mt_name'] : '';
-        $mtLabel = isset($r['mt_label']) && $r['mt_label'] !== null ? (string) $r['mt_label'] : '';
 
         $call = isset($r['call_sign']) && $r['call_sign'] !== null ? (string) $r['call_sign'] : '';
         $callUpper = strtoupper(trim($call));
@@ -223,8 +220,8 @@ final class MemberListRepository
                 ? (string) $r['address_state'] : '',
             'address_zip' => isset($r['address_zip']) && $r['address_zip'] !== null
                 ? (string) $r['address_zip'] : '',
-            'license_class' => self::referenceLabel($lcName !== '' ? $lcName : null, $lcLabel !== '' ? $lcLabel : null),
-            'membership_type' => self::referenceLabel($mtName !== '' ? $mtName : null, $mtLabel !== '' ? $mtLabel : null),
+            'license_class' => trim($lcName),
+            'membership_type' => trim($mtName),
             'arrl_member' => (bool) ($r['arrl_member'] ?? 0),
             'key_number' => isset($r['key_number']) && $r['key_number'] !== null ? (int) $r['key_number'] : null,
             'paid_through' => isset($r['paid_through']) && $r['paid_through'] !== null
@@ -248,16 +245,6 @@ final class MemberListRepository
         }
 
         return rtrim($b, '/');
-    }
-
-    private static function referenceLabel(?string $name, ?string $label): string
-    {
-        $l = trim((string) ($label ?? ''));
-        if ($l !== '') {
-            return $l;
-        }
-
-        return trim((string) ($name ?? ''));
     }
 
     private static function actionsHtml(int $memberId, string $base): string

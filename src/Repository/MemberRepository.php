@@ -13,42 +13,40 @@ final class MemberRepository
     {
     }
 
-    /** @return list<array{id: int, name: string|null, label: string|null}> */
+    /** @return list<array{id: int, name: string|null}> */
     public function listLicenseClasses(): array
     {
-        $stmt = $this->pdo->query('SELECT id, name, label FROM license_classes ORDER BY name ASC');
+        $stmt = $this->pdo->query('SELECT id, name FROM license_classes ORDER BY name ASC');
         if (!$stmt) {
             return [];
         }
-        /** @var list<array{id: mixed, name: mixed, label: mixed}> $rows */
+        /** @var list<array{id: mixed, name: mixed}> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $out = [];
         foreach ($rows as $r) {
             $out[] = [
                 'id' => (int) $r['id'],
                 'name' => isset($r['name']) ? (string) $r['name'] : null,
-                'label' => isset($r['label']) && $r['label'] !== null ? (string) $r['label'] : null,
             ];
         }
 
         return $out;
     }
 
-    /** @return list<array{id: int, name: string|null, label: string|null}> */
+    /** @return list<array{id: int, name: string|null}> */
     public function listMembershipTypes(): array
     {
-        $stmt = $this->pdo->query('SELECT id, name, label FROM membership_types ORDER BY name ASC');
+        $stmt = $this->pdo->query('SELECT id, name FROM membership_types ORDER BY name ASC');
         if (!$stmt) {
             return [];
         }
-        /** @var list<array{id: mixed, name: mixed, label: mixed}> $rows */
+        /** @var list<array{id: mixed, name: mixed}> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $out = [];
         foreach ($rows as $r) {
             $out[] = [
                 'id' => (int) $r['id'],
                 'name' => isset($r['name']) ? (string) $r['name'] : null,
-                'label' => isset($r['label']) && $r['label'] !== null ? (string) $r['label'] : null,
             ];
         }
 
@@ -257,7 +255,8 @@ final class MemberRepository
     {
         $sql = <<<SQL
             SELECT p.id, p.payment_date, p.paid_through, p.membership_type_id, p.form_number, p.notes,
-                   mt.name AS mt_name, mt.label AS mt_label
+                   mt.name AS mt_name,
+                   mt.id AS mt_row_id
             FROM payments p
             LEFT JOIN membership_types mt ON p.membership_type_id = mt.id
             WHERE p.member_id = ?
@@ -270,7 +269,10 @@ final class MemberRepository
         $out = [];
         foreach ($rows as $r) {
             $nm = isset($r['mt_name']) ? (string) $r['mt_name'] : '';
-            $lb = isset($r['mt_label']) && $r['mt_label'] !== null ? (string) $r['mt_label'] : '';
+            $mtRowId = isset($r['mt_row_id']) && $r['mt_row_id'] !== null && $r['mt_row_id'] !== ''
+                ? (int) $r['mt_row_id']
+                : null;
+            $display = MemberInputNormalizer::membershipTypeDisplay($mtRowId, $nm);
             $out[] = [
                 'id' => (int) $r['id'],
                 'payment_date' => isset($r['payment_date']) ? (string) $r['payment_date'] : '',
@@ -279,7 +281,7 @@ final class MemberRepository
                     ? (int) $r['membership_type_id'] : null,
                 'form_number' => isset($r['form_number']) && $r['form_number'] !== null ? (string) $r['form_number'] : null,
                 'notes' => isset($r['notes']) && $r['notes'] !== null ? (string) $r['notes'] : null,
-                'membership_type_display' => MemberInputNormalizer::referenceLabel($nm !== '' ? $nm : null, $lb !== '' ? $lb : null),
+                'membership_type_display' => $display,
             ];
         }
 

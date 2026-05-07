@@ -15,7 +15,6 @@ class LicenseClass(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
 
 class MembershipType(Base):
@@ -24,7 +23,6 @@ class MembershipType(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
 
 class AdminUser(Base):
